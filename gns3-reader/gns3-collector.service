@@ -8,6 +8,7 @@ Type=oneshot
 User=junioradmin
 Group=junioradmin
 WorkingDirectory=/home/junioradmin/gns3-reader
+EnvironmentFile=-/home/junioradmin/gns3-reader/.env
 
 ExecStart=/home/junioradmin/gns3-reader/venv/bin/python /home/junioradmin/gns3-reader/read_gns3_templates.py --config /home/junioradmin/gns3-reader/gns3_config.yml
 

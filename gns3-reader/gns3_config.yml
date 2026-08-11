@@ -1,18 +1,37 @@
 # Konfiguration für read_gns3_templates.py
-# Für jeden GNS3-Server, der ausgelesen werden soll, einen Eintrag anlegen.
-# 'username'/'password' nur nötig, falls auf dem GNS3-Server
+#
+# Für jeden ESXi-Host, dessen GNS3-VM ausgelesen werden soll, einen Eintrag
+# unter 'servers' anlegen. Die GNS3-VM wird bei JEDEM Lauf frisch über die
+# ESXi-API gesucht (Name enthält "gns3", Backup-VMs mit "-backup-<Zeitstempel>"
+# im Namen werden ausgeschlossen) und ihre aktuelle IP ausgelesen - ein fest
+# eingetragener 'host:' wird absichtlich NICHT mehr unterstützt, da eine
+# GNS3-VM per DHCP eine wechselnde IP bekommen kann und ein
+# '--fresh-gns3-vm'-Lauf von topologybuilder eine komplett neue VM anlegt.
+# Optional 'gns3_vm_name' angeben, falls auf einem Host mehrmals "gns3" im
+# VM-Namen vorkommt und die automatische Erkennung deshalb mehrdeutig wäre.
+#
+# Das ESXi-Passwort wird NICHT hier eingetragen, sondern über die
+# Umgebungsvariable ESXI_PASSWORD bereitgestellt (siehe .env.example) -
+# gilt für alle unten aufgeführten ESXi-Hosts gleichermaßen.
+#
+# 'username'/'password' (ohne esxi_-Präfix) sind etwas anderes: die sind
+# optional und nur nötig, falls auf dem GNS3-Server SELBST (nicht ESXi)
 # "Enable HTTP authentication" aktiviert ist - sonst einfach weglassen.
 
 servers:
   - name: gns3-server-1
-    host: 10.20.20.221
+    esxi_host: 10.20.20.201
+    esxi_username: root
     port: 80
+    # gns3_vm_name: GNS3
     # username: admin
     # password: geheim
 
   - name: gns3-server-2
-    host: 10.20.20.231
+    esxi_host: 10.20.20.202
+    esxi_username: root
     port: 80
+    # gns3_vm_name: GNS3-VM
 
 # Wohin die zusammengefasste Ausgabe geschrieben werden soll
 output_file: /home/junioradmin/gns3-reader/data/gns3_templates.yml

@@ -1,10 +1,10 @@
 [Unit]
-Description=Startet gns3-collector.service alle 15 Minuten
+Description=Startet gns3-collector.service alle 5 Minuten
 
 [Timer]
-OnCalendar=*:0/15
+OnCalendar=*:0/5
 Persistent=true
-RandomizedDelaySec=30
+RandomizedDelaySec=15
 
 [Install]
 WantedBy=timers.target
