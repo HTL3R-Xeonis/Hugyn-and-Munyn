@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
 """
-Liest von allen in der Konfigurationsdatei angegebenen GNS3-Servern
-sämtliche Templates aus und gleicht bei Docker-Templates zusätzlich ab,
-ob das referenzierte Image auf dem jeweiligen Server tatsächlich
-vorhanden (gepullt) ist.
+Reads all templates from every GNS3 server listed in the config file, and
+for Docker templates additionally checks whether the referenced image is
+actually present (pulled) on that server.
 
-Jeder Server-Eintrag in der Config gibt einen ESXi-Host an, nicht direkt
-eine GNS3-Server-IP - die GNS3-VM auf diesem Host wird bei jedem Lauf
-frisch über die ESXi-API gesucht (Name enthält "gns3") und ihre aktuelle
-IP verwendet, statt sich auf eine fest eingetragene, potenziell veraltete
-IP zu verlassen (GNS3-VMs bekommen ihre IP oft per DHCP, und ein
-'--fresh-gns3-vm'-Lauf von topologybuilder ersetzt die VM komplett -
-beides macht eine statische IP unzuverlässig). Braucht deshalb zusätzlich
-zu requests/pyyaml auch pyvmomi und ein ESXi-Passwort über die
-Umgebungsvariable ESXI_PASSWORD (siehe .env.example).
+Each server entry in the config gives an ESXi host, not a GNS3 server IP
+directly - the GNS3 VM on that host is looked up fresh via the ESXi API on
+every run (name contains "gns3") and its current IP is used, instead of
+relying on a hardcoded, potentially stale IP (GNS3 VMs often get their IP
+via DHCP, and a topologybuilder '--fresh-gns3-vm' run replaces the VM
+entirely - both make a static IP unreliable). Because of this it also needs
+pyvmomi in addition to requests/pyyaml, and an ESXi password via the
+ESXI_PASSWORD environment variable (see .env.example).
 
-Verwendung:
+Usage:
     ./venv/bin/python read_gns3_templates.py --config gns3_config.yml
 
-Abhängigkeiten installieren:
+Install dependencies:
     pip3 install -r requirements.txt
 """
 
@@ -52,7 +50,7 @@ _BACKUP_VM_NAME_PATTERN = re.compile(r"-backup-\d{14}")
 
 
 def setup_logging(log_file: Optional[str]) -> logging.Logger:
-    """Richtet Logging auf Konsole + optional rotierende Log-Datei ein."""
+    """Sets up logging to console + optionally a rotating log file."""
     logger = logging.getLogger("gns3_template_reader")
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -80,22 +78,22 @@ def setup_logging(log_file: Optional[str]) -> logging.Logger:
 def load_config(config_path: str) -> dict:
     path = Path(config_path)
     if not path.exists():
-        print(f"FEHLER: Config-Datei nicht gefunden: {path}", file=sys.stderr)
+        print(f"ERROR: config file not found: {path}", file=sys.stderr)
         sys.exit(1)
 
     with open(path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     if not config or "servers" not in config or not config["servers"]:
-        print("FEHLER: Config enthält keine Server unter 'servers'.", file=sys.stderr)
+        print("ERROR: config contains no servers under 'servers'.", file=sys.stderr)
         sys.exit(1)
 
     for server_cfg in config["servers"]:
         if "esxi_host" not in server_cfg:
             print(
-                f"FEHLER: Server-Eintrag {server_cfg!r} hat kein 'esxi_host'. "
-                f"Ein direkter GNS3-'host:' Eintrag wird nicht mehr unterstützt "
-                f"- siehe Kommentare in gns3_config.yml.",
+                f"ERROR: server entry {server_cfg!r} has no 'esxi_host'. "
+                f"A direct GNS3 'host:' entry is no longer supported - see "
+                f"the comments in gns3_config.yml.",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -104,33 +102,33 @@ def load_config(config_path: str) -> dict:
 
 
 def get_templates(base_url: str, auth: Optional[tuple], timeout: int, log: logging.Logger) -> list[dict]:
-    """Holt ALLE Templates von einem GNS3-Server (ungefiltert, inkl. eingebauter)."""
+    """Fetches ALL templates from a GNS3 server (unfiltered, including builtins)."""
     url = f"{base_url}/v2/templates"
     resp = requests.get(url, auth=auth, timeout=timeout)
     resp.raise_for_status()
     templates = resp.json()
-    log.info("  %d Template(s) gefunden.", len(templates))
+    log.info("  %d template(s) found.", len(templates))
     return templates
 
 
 def get_docker_images(base_url: str, auth: Optional[tuple], timeout: int, log: logging.Logger) -> list[dict]:
-    """Holt die Liste der auf dem Compute tatsächlich vorhandenen Docker-Images."""
+    """Fetches the list of Docker images actually present on the compute."""
     url = f"{base_url}/v2/compute/docker/images"
     try:
         resp = requests.get(url, auth=auth, timeout=timeout)
         resp.raise_for_status()
         images = resp.json()
-        log.info("  %d Docker-Image(s) auf dem Compute gefunden.", len(images))
+        log.info("  %d Docker image(s) found on the compute.", len(images))
         return images
     except requests.RequestException as e:
-        log.warning("  Konnte Docker-Images nicht abrufen (evtl. kein Docker-Compute): %s", e)
+        log.warning("  Could not fetch Docker images (maybe no Docker compute): %s", e)
         return []
 
 
 def extract_available_image_names(images_data: list[dict]) -> set[str]:
-    """Extrahiert alle bekannten Image-Namen/Tags aus der Docker-Images-Antwort,
-    unabhängig vom genauen Antwortformat (verschiedene GNS3-Versionen liefern
-    teils leicht unterschiedliche Felder)."""
+    """Extracts all known image names/tags from the Docker images response,
+    regardless of the exact response format (different GNS3 versions
+    sometimes return slightly different fields)."""
     names: set[str] = set()
     for img in images_data:
         if not isinstance(img, dict):
@@ -146,7 +144,7 @@ def extract_available_image_names(images_data: list[dict]) -> set[str]:
 def enrich_templates_with_docker_status(
     templates: list[dict], available_images: set[str]
 ) -> None:
-    """Fügt Docker-Templates ein Feld 'image_available' hinzu (True/False/None)."""
+    """Adds an 'image_available' field (True/False/None) to Docker templates."""
     for template in templates:
         if template.get("template_type") == "docker":
             image_name = template.get("image")
@@ -157,10 +155,10 @@ def enrich_templates_with_docker_status(
 
 def connect_esxi(host: str, username: str, password: str) -> vim.ServiceInstance:
     """
-    Baut eine Verbindung zum ESXi-Host auf (direkt, nicht über vCenter) -
-    portiert von topologybuilder's ESXiConnection.connect(), gleiche
-    TLS-Handhabung (selbstsignierte Zertifikate der ESXi-Hosts werden
-    akzeptiert, das ist hier bewusst so, nicht übersehen).
+    Opens a connection to the ESXi host (direct, not via vCenter) - ported
+    from topologybuilder's ESXiConnection.connect(), same TLS handling
+    (self-signed ESXi host certificates are accepted, intentionally, not
+    an oversight).
     """
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
@@ -174,14 +172,14 @@ def find_gns3_vm_ip(
     instance: vim.ServiceInstance, vm_name: Optional[str], log: logging.Logger
 ) -> Optional[str]:
     """
-    Sucht die GNS3-VM auf dem gegebenen ESXi-Host und liefert ihre aktuelle
-    IPv4-Adresse zurück - None, falls keine eindeutige GNS3-VM gefunden
-    wird oder sie (noch) keine IP über VMware Tools meldet.
-    :param vm_name: exakter VM-Name, falls angegeben (gns3_vm_name in der
-        Config) - sonst automatische Erkennung wie in topologybuilder:
-        Name enthält "gns3" (Groß-/Kleinschreibung egal), Backup-VMs
-        (Name endet auf "-backup-<Zeitstempel>") werden ausgeschlossen,
-        nur bei genau einem verbleibenden Kandidaten wird geraten.
+    Looks up the GNS3 VM on the given ESXi host and returns its current
+    IPv4 address - None if no unambiguous GNS3 VM is found, or it doesn't
+    (yet) report an IP via VMware Tools.
+    :param vm_name: exact VM name, if given (gns3_vm_name in the config) -
+        otherwise auto-detection just like topologybuilder: name contains
+        "gns3" (case-insensitive), backup VMs (name ends in
+        "-backup-<timestamp>") are excluded, and a guess is only made if
+        exactly one candidate remains.
     """
     content = instance.RetrieveContent()
     container_view = content.viewManager.CreateContainerView(
@@ -195,7 +193,7 @@ def find_gns3_vm_ip(
     if vm_name is not None:
         matches = [vm for vm in all_vms if vm.name == vm_name]
         if not matches:
-            log.warning("  GNS3-VM '%s' nicht gefunden.", vm_name)
+            log.warning("  GNS3 VM '%s' not found.", vm_name)
             return None
     else:
         matches = [
@@ -205,13 +203,13 @@ def find_gns3_vm_ip(
         ]
         if len(matches) > 1:
             log.warning(
-                "  Mehrere GNS3-VMs gefunden (%s) - überspringe, gns3_vm_name "
-                "in der Config angeben um eindeutig zu machen.",
+                "  Multiple GNS3 VMs found (%s) - skipping, set gns3_vm_name "
+                "in the config to disambiguate.",
                 [vm.name for vm in matches],
             )
             return None
         if not matches:
-            log.warning("  Keine GNS3-VM auf diesem ESXi-Host gefunden.")
+            log.warning("  No GNS3 VM found on this ESXi host.")
             return None
 
     vm = matches[0]
@@ -225,10 +223,10 @@ def find_gns3_vm_ip(
                 continue
             if parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
                 continue
-            log.info("  GNS3-VM '%s' gefunden, IP: %s", vm.name, address)
+            log.info("  GNS3 VM '%s' found, IP: %s", vm.name, address)
             return address
 
-    log.warning("  GNS3-VM '%s' gefunden, aber noch keine IP gemeldet.", vm.name)
+    log.warning("  GNS3 VM '%s' found, but no IP reported yet.", vm.name)
     return None
 
 
@@ -239,7 +237,7 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
     gns3_vm_name = server_cfg.get("gns3_vm_name")
     port = server_cfg.get("port", 80)
 
-    log.info("Server '%s': ermittle GNS3-VM über ESXi-Host %s ...", name, esxi_host)
+    log.info("Server '%s': resolving GNS3 VM via ESXi host %s ...", name, esxi_host)
 
     result = {
         "name": name,
@@ -252,17 +250,17 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
     try:
         instance = connect_esxi(esxi_host, esxi_username, esxi_password)
     except vim.fault.VimFault as e:
-        log.error("  Konnte nicht mit ESXi-Host %s verbinden: %s", esxi_host, e.msg)
+        log.error("  Could not connect to ESXi host %s: %s", esxi_host, e.msg)
         result["status"] = "esxi_unreachable"
         result["error"] = e.msg
         return result
     except Exception as e:
-        # Breiter als nur vim.fault.VimFault (Login-Fehler): SmartConnect kann
-        # auch bei Netzwerkproblemen (Host down, DNS, TLS-Handshake) mit
-        # anderen Exception-Typen scheitern (socket/ssl-Ebene). Ein einzelner
-        # nicht erreichbarer ESXi-Host soll nicht den ganzen Lauf abbrechen
-        # und die Ergebnisse der übrigen Server verlieren.
-        log.error("  Konnte nicht mit ESXi-Host %s verbinden: %s", esxi_host, e)
+        # Broader than just vim.fault.VimFault (login errors): SmartConnect
+        # can also fail with other exception types on network problems
+        # (host down, DNS, TLS handshake - socket/ssl level). A single
+        # unreachable ESXi host shouldn't abort the whole run and lose the
+        # results for the other servers.
+        log.error("  Could not connect to ESXi host %s: %s", esxi_host, e)
         result["status"] = "esxi_unreachable"
         result["error"] = str(e)
         return result
@@ -286,7 +284,7 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
     try:
         templates = get_templates(base_url, auth, timeout, log)
     except requests.RequestException as e:
-        log.error("  Konnte Templates nicht abrufen: %s", e)
+        log.error("  Could not fetch templates: %s", e)
         result["status"] = "unreachable"
         result["error"] = str(e)
         return result
@@ -302,12 +300,12 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Liest Templates von mehreren GNS3-Servern aus (per Config)."
+        description="Reads templates from multiple GNS3 servers (via config)."
     )
     parser.add_argument(
         "--config",
         default=DEFAULT_CONFIG_PATH,
-        help=f"Pfad zur Config-Datei (Standard: {DEFAULT_CONFIG_PATH})",
+        help=f"Path to the config file (default: {DEFAULT_CONFIG_PATH})",
     )
     return parser.parse_args()
 
@@ -322,13 +320,13 @@ def main() -> int:
     esxi_password = os.getenv("ESXI_PASSWORD")
     if not esxi_password:
         log.error(
-            "ESXI_PASSWORD Umgebungsvariable nicht gesetzt - kann keine "
-            "ESXi-Verbindung aufbauen. Siehe .env.example."
+            "ESXI_PASSWORD environment variable not set - cannot establish "
+            "an ESXi connection. See .env.example."
         )
         return 1
 
     log.info("=" * 60)
-    log.info("Starte GNS3-Template-Auslesung für %d Server", len(config["servers"]))
+    log.info("Starting GNS3 template collection for %d server(s)", len(config["servers"]))
 
     all_results = []
     for server_cfg in config["servers"]:
@@ -351,9 +349,9 @@ def main() -> int:
     log.info("-" * 60)
     total_templates = sum(len(r["templates"]) for r in all_results)
     reachable = sum(1 for r in all_results if r["status"] == "ok")
-    log.info("Server erreichbar:     %d / %d", reachable, len(all_results))
-    log.info("Templates gesamt:      %d", total_templates)
-    log.info("Geschrieben nach:      %s", output_path)
+    log.info("Servers reachable:     %d / %d", reachable, len(all_results))
+    log.info("Templates total:       %d", total_templates)
+    log.info("Written to:            %s", output_path)
     log.info("=" * 60)
 
     return 0

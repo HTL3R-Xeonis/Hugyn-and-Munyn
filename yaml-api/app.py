@@ -18,7 +18,7 @@ log = logging.getLogger("template_api")
 
 app = FastAPI(title="Template API", version="2.0")
 
-# ---------- Konfiguration ----------
+# ---------- Configuration ----------
 DATA_DIR = Path("/data")
 TEMPLATES_FILE = DATA_DIR / "templates.yml"
 
@@ -33,11 +33,11 @@ REQUEST_TIMEOUT = 15
 # ------------------------------------
 
 
-# ---------- Hilfsfunktionen: Templates laden & bewerten ----------
+# ---------- Helpers: load & score templates ----------
 def load_templates() -> list[dict]:
     if not TEMPLATES_FILE.exists():
         raise HTTPException(
-            500, f"templates.yml nicht gefunden unter {TEMPLATES_FILE}"
+            500, f"templates.yml not found at {TEMPLATES_FILE}"
         )
     with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -92,7 +92,7 @@ def rank_templates(
     return scored
 
 
-# ---------- Hilfsfunktionen: Filebrowser-Proxy ----------
+# ---------- Helpers: Filebrowser proxy ----------
 def filebrowser_login() -> str:
     resp = requests.post(
         f"{FILEBROWSER_URL}/api/login",
@@ -120,7 +120,7 @@ def build_remote_path(template: dict) -> str:
     file_name = template.get("file")
 
     if not file_name:
-        raise HTTPException(500, "Template hat kein 'file'-Feld.")
+        raise HTTPException(500, "Template has no 'file' field.")
 
     return f"{source_dir}/{file_name}" if source_dir else file_name
 
@@ -128,7 +128,7 @@ def build_remote_path(template: dict) -> str:
 def proxy_download(template: dict) -> StreamingResponse:
     if not FILEBROWSER_PASSWORD:
         raise HTTPException(
-            500, "FILEBROWSER_PASSWORD ist auf dem API-Server nicht gesetzt."
+            500, "FILEBROWSER_PASSWORD is not set on the API server."
         )
 
     remote_path = build_remote_path(template)
@@ -137,8 +137,8 @@ def proxy_download(template: dict) -> StreamingResponse:
     try:
         generator = stream_from_filebrowser(remote_path)
     except requests.RequestException as e:
-        log.error("Fehler beim Zugriff auf Filebrowser: %s", e)
-        raise HTTPException(502, f"Fehler beim Zugriff auf den Share: {e}")
+        log.error("Error accessing Filebrowser: %s", e)
+        raise HTTPException(502, f"Error accessing the share: {e}")
 
     return StreamingResponse(
         generator,
@@ -147,7 +147,7 @@ def proxy_download(template: dict) -> StreamingResponse:
     )
 
 
-# ---------- Routen ----------
+# ---------- Routes ----------
 @app.get("/")
 def root():
     return {"name": "Template API", "version": "2.0"}
@@ -155,21 +155,21 @@ def root():
 
 @app.get("/api/templates")
 def list_templates():
-    """Gibt alle bekannten Templates als JSON zurück."""
+    """Returns all known templates as JSON."""
     templates = load_templates()
     return {"count": len(templates), "templates": templates}
 
 
 @app.get("/api/search")
 def search_templates(
-    name: Optional[str] = Query(None, description="Gesuchter Name"),
-    tags: Optional[str] = Query(None, description="Kommagetrennte Tags"),
+    name: Optional[str] = Query(None, description="Name to search for"),
+    tags: Optional[str] = Query(None, description="Comma-separated tags"),
     top: int = Query(5, ge=1, le=50),
     min_score: float = Query(0.0, ge=0.0, le=1.0),
 ):
-    """Sucht Templates per Fuzzy-Matching auf Name und/oder Tags."""
+    """Searches templates via fuzzy matching on name and/or tags."""
     if not name and not tags:
-        raise HTTPException(400, "Bitte mindestens 'name' oder 'tags' angeben.")
+        raise HTTPException(400, "Please provide at least 'name' or 'tags'.")
 
     tags_query = [t.strip() for t in tags.split(",")] if tags else []
     templates = load_templates()
@@ -186,11 +186,11 @@ def search_templates(
 
 @app.get("/api/download/{template_id}")
 def download_by_id(template_id: str):
-    """Lädt die .ova-Datei anhand der exakten Template-ID herunter."""
+    """Downloads the .ova file for the exact given template ID."""
     templates = load_templates()
     match = next((t for t in templates if t.get("id") == template_id), None)
     if not match:
-        raise HTTPException(404, f"Kein Template mit id={template_id} gefunden.")
+        raise HTTPException(404, f"No template found with id={template_id}.")
 
     return proxy_download(match)
 
@@ -201,26 +201,26 @@ def download_by_query(
     tags: Optional[str] = Query(None),
     min_score: float = Query(0.3, ge=0.0, le=1.0),
 ):
-    """Sucht den besten Treffer per Name/Tags und lädt ihn direkt herunter."""
+    """Finds the best match by name/tags and downloads it directly."""
     if not name and not tags:
-        raise HTTPException(400, "Bitte mindestens 'name' oder 'tags' angeben.")
+        raise HTTPException(400, "Please provide at least 'name' or 'tags'.")
 
     tags_query = [t.strip() for t in tags.split(",")] if tags else []
     templates = load_templates()
     scored = rank_templates(templates, name, tags_query)
 
     if not scored or scored[0][0] < min_score:
-        raise HTTPException(404, "Kein ausreichend guter Treffer gefunden.")
+        raise HTTPException(404, "No sufficiently good match found.")
 
     best_score, best_template = scored[0]
-    log.info("Bester Treffer: %s (score=%.2f)", best_template.get("name"), best_score)
+    log.info("Best match: %s (score=%.2f)", best_template.get("name"), best_score)
     return proxy_download(best_template)
 
 
-# ---------- nur yml  ----------
+# ---------- yml only (legacy) ----------
 @app.get("/{name}")
 def get_file(name: str):
-    """Liefert eine rohe .yml-Datei nach Namen aus /data zurück (Altbestand)."""
+    """Returns a raw .yml file by name from /data (legacy)."""
     file = DATA_DIR / f"{name}.yml"
     if not file.exists():
         raise HTTPException(404, "File not found")

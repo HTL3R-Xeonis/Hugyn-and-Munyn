@@ -20,7 +20,7 @@ TEMPLATES_FILE = DATA_DIR / "gns3_templates.yml"
 LIVE_REQUEST_TIMEOUT = 15
 
 
-# ---------- Live-Abfrage eines beliebigen, im Request angegebenen Servers ----------
+# ---------- Live query of any server given in the request ----------
 def live_get_templates(base_url: str, auth: Optional[tuple], timeout: int) -> list[dict]:
     resp = requests.get(f"{base_url}/v2/templates", auth=auth, timeout=timeout)
     resp.raise_for_status()
@@ -33,7 +33,7 @@ def live_get_docker_images(base_url: str, auth: Optional[tuple], timeout: int) -
         resp.raise_for_status()
         return resp.json()
     except requests.RequestException as e:
-        log.warning("Docker-Images nicht abrufbar (%s): %s", base_url, e)
+        log.warning("Could not fetch Docker images (%s): %s", base_url, e)
         return []
 
 
@@ -59,11 +59,11 @@ def live_enrich_docker_status(templates: list[dict], available_images: set[str])
             )
 
 
-# ---------- Gecachte Daten (vom Collector geschrieben) ----------
+# ---------- Cached data (written by the collector) ----------
 def load_data() -> dict:
     if not TEMPLATES_FILE.exists():
         raise HTTPException(
-            500, f"gns3_templates.yml nicht gefunden unter {TEMPLATES_FILE}"
+            500, f"gns3_templates.yml not found at {TEMPLATES_FILE}"
         )
     with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -71,8 +71,8 @@ def load_data() -> dict:
 
 
 def flatten_templates(data: dict) -> list[dict]:
-    """Baut aus der Server-strukturierten Rohdatei eine flache Liste aller
-    Templates, jeweils angereichert um Server-Kontext (Name/Host)."""
+    """Builds a flat list of all templates from the per-server raw data,
+    each enriched with server context (name/host)."""
     flat: list[dict] = []
     for server in data.get("servers", []):
         server_name = server.get("name")
@@ -80,7 +80,7 @@ def flatten_templates(data: dict) -> list[dict]:
         server_status = server.get("status")
 
         for template in server.get("templates", []):
-            entry = dict(template)  # Kopie, um Original nicht zu verändern
+            entry = dict(template)  # copy, don't mutate the original
             entry["_server_name"] = server_name
             entry["_server_host"] = server_host
             entry["_server_status"] = server_status
@@ -110,25 +110,24 @@ def matches_filters(
     return True
 
 
-# ---------- Routen ----------
+# ---------- Routes ----------
 @app.get("/api/live-templates")
 def get_live_templates(
-    host: str = Query(..., description="IP oder Hostname des GNS3-Servers"),
-    port: int = Query(80, description="Port des GNS3-Servers (Standard: 80)"),
-    username: Optional[str] = Query(None, description="Nur nötig, falls HTTP-Auth aktiv ist"),
-    password: Optional[str] = Query(None, description="Nur nötig, falls HTTP-Auth aktiv ist"),
+    host: str = Query(..., description="IP or hostname of the GNS3 server"),
+    port: int = Query(80, description="Port of the GNS3 server (default: 80)"),
+    username: Optional[str] = Query(None, description="Only needed if HTTP auth is enabled"),
+    password: Optional[str] = Query(None, description="Only needed if HTTP auth is enabled"),
     include_docker_status: bool = Query(
-        True, description="Bei Docker-Templates zusätzlich Image-Verfügbarkeit prüfen"
+        True, description="Also check image availability for Docker templates"
     ),
 ):
     """
-    Fragt einen beliebigen GNS3-Server LIVE ab, unabhängig davon, ob er in
-    gns3_config.yml des Collectors eingetragen ist. Praktisch für Server,
-    die (noch) nicht Teil der periodischen Sammlung sind, oder um den
-    aktuellsten Stand ohne Wartezeit auf den nächsten Collector-Lauf zu
-    bekommen.
+    Queries an arbitrary GNS3 server LIVE, regardless of whether it's
+    listed in the collector's gns3_config.yml. Useful for servers that
+    aren't (yet) part of the periodic collection, or to get the latest
+    state without waiting for the next collector run.
 
-    Beispiel:
+    Example:
         GET /api/live-templates?host=10.20.20.221&port=80
     """
     base_url = f"http://{host}:{port}"
@@ -138,7 +137,7 @@ def get_live_templates(
         templates = live_get_templates(base_url, auth, LIVE_REQUEST_TIMEOUT)
     except requests.RequestException as e:
         raise HTTPException(
-            502, f"GNS3-Server unter {base_url} nicht erreichbar: {e}"
+            502, f"GNS3 server at {base_url} unreachable: {e}"
         )
 
     docker_images: list[dict] = []
@@ -164,23 +163,23 @@ def root():
 
 @app.get("/api/templates")
 def get_templates(
-    name: Optional[str] = Query(None, description="Teilstring-Suche im Namen"),
+    name: Optional[str] = Query(None, description="Substring search on the name"),
     template_type: Optional[str] = Query(
-        None, description="z.B. docker, qemu, dynamips, iou, vpcs, cloud"
+        None, description="e.g. docker, qemu, dynamips, iou, vpcs, cloud"
     ),
     category: Optional[str] = Query(
-        None, description="z.B. router, switch, guest, firewall"
+        None, description="e.g. router, switch, guest, firewall"
     ),
     builtin: Optional[bool] = Query(
-        None, description="true = nur eingebaute, false = nur eigene Templates"
+        None, description="true = builtin only, false = custom templates only"
     ),
-    server: Optional[str] = Query(None, description="Name des GNS3-Servers"),
+    server: Optional[str] = Query(None, description="Name of the GNS3 server"),
 ):
     """
-    Liefert die Liste aller Templates über alle konfigurierten GNS3-Server.
+    Returns the list of all templates across every configured GNS3 server.
 
-    Ohne Parameter: komplette Liste.
-    Mit Parametern: gefilterte Liste (alle angegebenen Filter müssen zutreffen).
+    Without parameters: the full list.
+    With parameters: filtered list (every given filter must match).
     """
     data = load_data()
     templates = flatten_templates(data)
@@ -207,7 +206,7 @@ def get_templates(
 
 @app.get("/api/servers")
 def get_servers():
-    """Liefert den Rohzustand aller Server (inkl. nicht erreichbarer, mit Fehlermeldung)."""
+    """Returns the raw state of every server (including unreachable ones, with an error message)."""
     data = load_data()
     servers = data.get("servers", [])
     return {
@@ -228,8 +227,8 @@ def get_servers():
 
 @app.get("/api/templates/types")
 def get_template_types():
-    """Liefert alle vorkommenden template_type-Werte (praktisch, um zu wissen,
-    wonach man mit dem 'template_type'-Filter überhaupt suchen kann)."""
+    """Returns every template_type value seen (useful to know what values
+    the 'template_type' filter actually accepts)."""
     data = load_data()
     templates = flatten_templates(data)
     types = sorted({t.get("template_type") for t in templates if t.get("template_type")})
@@ -238,7 +237,7 @@ def get_template_types():
 
 @app.get("/api/templates/categories")
 def get_template_categories():
-    """Liefert alle vorkommenden category-Werte."""
+    """Returns every category value seen."""
     data = load_data()
     templates = flatten_templates(data)
     categories = sorted({t.get("category") for t in templates if t.get("category")})

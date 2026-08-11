@@ -1,5 +1,5 @@
 [Unit]
-Description=Liest Templates von allen konfigurierten GNS3-Servern aus
+Description=Reads templates from all configured GNS3 servers
 Wants=network-online.target
 After=network-online.target
 

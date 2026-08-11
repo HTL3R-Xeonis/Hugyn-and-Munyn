@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Nur lesend: die API braucht nur templates.yml, nicht das ganze NFS-Share
+      # Read-only: the API only needs templates.yml, not the whole NFS share
       - /home/junioradmin/yaml-api/data:/data:ro
     environment:
       - FILEBROWSER_URL=http://10.20.20.171:4000

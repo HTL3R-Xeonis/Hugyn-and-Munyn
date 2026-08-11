@@ -1,22 +1,22 @@
-# Konfiguration für read_gns3_templates.py
+# Configuration for read_gns3_templates.py
 #
-# Für jeden ESXi-Host, dessen GNS3-VM ausgelesen werden soll, einen Eintrag
-# unter 'servers' anlegen. Die GNS3-VM wird bei JEDEM Lauf frisch über die
-# ESXi-API gesucht (Name enthält "gns3", Backup-VMs mit "-backup-<Zeitstempel>"
-# im Namen werden ausgeschlossen) und ihre aktuelle IP ausgelesen - ein fest
-# eingetragener 'host:' wird absichtlich NICHT mehr unterstützt, da eine
-# GNS3-VM per DHCP eine wechselnde IP bekommen kann und ein
-# '--fresh-gns3-vm'-Lauf von topologybuilder eine komplett neue VM anlegt.
-# Optional 'gns3_vm_name' angeben, falls auf einem Host mehrmals "gns3" im
-# VM-Namen vorkommt und die automatische Erkennung deshalb mehrdeutig wäre.
+# For every ESXi host whose GNS3 VM should be read, add an entry under
+# 'servers'. The GNS3 VM is looked up fresh via the ESXi API on EVERY run
+# (name contains "gns3", backup VMs with "-backup-<timestamp>" in the name
+# are excluded) and its current IP is read - a hardcoded 'host:' is
+# deliberately NO LONGER supported, since a GNS3 VM's IP can change via
+# DHCP and a topologybuilder '--fresh-gns3-vm' run creates a completely
+# new VM.
+# Optionally give 'gns3_vm_name' if "gns3" appears in more than one VM name
+# on a host, which would otherwise make auto-detection ambiguous.
 #
-# Das ESXi-Passwort wird NICHT hier eingetragen, sondern über die
-# Umgebungsvariable ESXI_PASSWORD bereitgestellt (siehe .env.example) -
-# gilt für alle unten aufgeführten ESXi-Hosts gleichermaßen.
+# The ESXi password is NOT entered here, but provided via the ESXI_PASSWORD
+# environment variable (see .env.example) - applies equally to every ESXi
+# host listed below.
 #
-# 'username'/'password' (ohne esxi_-Präfix) sind etwas anderes: die sind
-# optional und nur nötig, falls auf dem GNS3-Server SELBST (nicht ESXi)
-# "Enable HTTP authentication" aktiviert ist - sonst einfach weglassen.
+# 'username'/'password' (without the esxi_ prefix) are something different:
+# these are optional and only needed if "Enable HTTP authentication" is
+# enabled on the GNS3 server ITSELF (not ESXi) - otherwise just omit them.
 
 servers:
   - name: gns3-server-1
@@ -25,7 +25,7 @@ servers:
     port: 80
     # gns3_vm_name: GNS3
     # username: admin
-    # password: geheim
+    # password: secret
 
   - name: gns3-server-2
     esxi_host: 10.20.20.202
@@ -33,11 +33,11 @@ servers:
     port: 80
     # gns3_vm_name: GNS3-VM
 
-# Wohin die zusammengefasste Ausgabe geschrieben werden soll
+# Where to write the combined output to
 output_file: /home/junioradmin/gns3-reader/data/gns3_templates.yml
 
-# Wohin geloggt werden soll
+# Where to log to
 log_file: /home/junioradmin/gns3-reader/logs/read_gns3.log
 
-# Timeout pro HTTP-Request in Sekunden
+# Timeout per HTTP request in seconds
 request_timeout: 15

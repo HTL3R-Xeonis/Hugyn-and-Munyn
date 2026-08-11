@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Sammelt alle Template-YAML-Dateien aus dem NFS-Share (über die Filebrowser-API),
-validiert sie, erkennt Duplikate und schreibt eine zusammengefasste templates.yml.
+Collects all template YAML files from the NFS share (via the Filebrowser API),
+validates them, detects duplicates, and writes a combined templates.yml.
 
-Erwartetes Format je Quell-Datei:
+Expected format for each source file:
 
     version: 1
     templates:
@@ -12,7 +12,7 @@ Erwartetes Format je Quell-Datei:
         file: ...
         ...
 
-Abhängigkeiten installieren:
+Install dependencies:
     pip3 install requests pyyaml
 """
 
@@ -27,11 +27,11 @@ from pathlib import Path
 import requests
 import yaml
 
-# ---------- Konfiguration ----------
+# ---------- Configuration ----------
 FILEBROWSER_URL = os.environ.get("FILEBROWSER_URL", "http://10.20.20.171:4000")
 USERNAME = os.environ.get("FILEBROWSER_USER", "admin")
-# Passwort per Umgebungsvariable setzen, nicht hart im Script:
-#   export FILEBROWSER_PASSWORD='DeinPasswort!123'
+# Set the password via an environment variable, not hardcoded in the script:
+#   export FILEBROWSER_PASSWORD='YourPassword!123'
 PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
 
 OUTPUT_FILE = Path("/home/junioradmin/yaml-api/data/templates.yml")
@@ -40,7 +40,7 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
 REQUEST_TIMEOUT = 15
 
-# Pflichtfelder, die jedes Template haben muss, um übernommen zu werden
+# Required fields every template must have to be accepted
 REQUIRED_FIELDS = [
     "id",
     "name",
@@ -56,7 +56,7 @@ REQUIRED_FIELDS = [
 
 
 def setup_logging() -> logging.Logger:
-    """Richtet Logging auf Konsole + rotierende Log-Datei ein."""
+    """Sets up logging to console + a rotating log file."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger("template_collector")
@@ -67,12 +67,12 @@ def setup_logging() -> logging.Logger:
         "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # Konsole (wichtig für systemd/journalctl)
+    # Console (important for systemd/journalctl)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(fmt)
     logger.addHandler(console_handler)
 
-    # Datei, max. 5 MB, 5 Backups
+    # File, max 5 MB, 5 backups
     file_handler = RotatingFileHandler(
         LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
@@ -86,7 +86,7 @@ log = setup_logging()
 
 
 def login() -> str:
-    """Loggt sich bei Filebrowser ein und gibt den Auth-Token zurück."""
+    """Logs into Filebrowser and returns the auth token."""
     try:
         resp = requests.post(
             f"{FILEBROWSER_URL}/api/login",
@@ -95,13 +95,13 @@ def login() -> str:
         )
         resp.raise_for_status()
     except requests.RequestException as e:
-        log.error("Login fehlgeschlagen: %s", e)
+        log.error("Login failed: %s", e)
         raise
     return resp.text.strip().strip('"')
 
 
 def list_dir(token: str, path: str = "") -> dict:
-    """Listet den Inhalt eines Verzeichnisses via API."""
+    """Lists the contents of a directory via the API."""
     url = f"{FILEBROWSER_URL}/api/resources/{path}"
     resp = requests.get(url, headers={"X-Auth": token}, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
@@ -109,7 +109,7 @@ def list_dir(token: str, path: str = "") -> dict:
 
 
 def get_raw_file(token: str, path: str) -> str:
-    """Lädt den Rohinhalt einer Datei via API."""
+    """Loads the raw content of a file via the API."""
     url = f"{FILEBROWSER_URL}/api/raw/{path}"
     resp = requests.get(url, headers={"X-Auth": token}, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
@@ -117,12 +117,12 @@ def get_raw_file(token: str, path: str) -> str:
 
 
 def find_yml_files(token: str, path: str = "") -> list[str]:
-    """Durchsucht rekursiv alle Ordner nach .yml/.yaml Dateien."""
+    """Recursively searches all folders for .yml/.yaml files."""
     yml_files = []
     try:
         data = list_dir(token, path)
     except requests.RequestException as e:
-        log.error("Konnte Verzeichnis '%s' nicht auflisten: %s", path or "/", e)
+        log.error("Could not list directory '%s': %s", path or "/", e)
         return yml_files
 
     for item in data.get("items", []):
@@ -136,34 +136,34 @@ def find_yml_files(token: str, path: str = "") -> list[str]:
 
 
 def validate_template(template: dict, source: str) -> list[str]:
-    """Prüft ein einzelnes Template auf Pflichtfelder und grobe Typkonsistenz.
-    Gibt eine Liste von Fehlermeldungen zurück (leer = gültig)."""
+    """Checks a single template for required fields and rough type
+    consistency. Returns a list of error messages (empty = valid)."""
     errors = []
 
     if not isinstance(template, dict):
-        return [f"Eintrag ist kein Objekt/Dict: {template!r}"]
+        return [f"Entry is not an object/dict: {template!r}"]
 
     for field in REQUIRED_FIELDS:
         if field not in template or template[field] in (None, ""):
-            errors.append(f"Pflichtfeld '{field}' fehlt oder ist leer")
+            errors.append(f"Required field '{field}' is missing or empty")
 
-    # id sollte ein nicht-leerer String sein
+    # id should be a non-empty string
     if "id" in template and not isinstance(template["id"], str):
-        errors.append("'id' sollte ein String sein")
+        errors.append("'id' should be a string")
 
-    # cpu sollte eine Zahl sein
+    # cpu should be a number
     if "cpu" in template and not isinstance(template["cpu"], (int, float)):
-        errors.append("'cpu' sollte eine Zahl sein")
+        errors.append("'cpu' should be a number")
 
-    # tags/users/passwords sollten, falls vorhanden, Listen sein
+    # tags/users/passwords should be lists, if present
     for list_field in ("tags", "users", "passwords"):
         if list_field in template and not isinstance(template[list_field], list):
-            errors.append(f"'{list_field}' sollte eine Liste sein")
+            errors.append(f"'{list_field}' should be a list")
 
     if errors:
         for err in errors:
             log.warning(
-                "  Validierungsfehler in %s (id=%s, name=%s): %s",
+                "  Validation error in %s (id=%s, name=%s): %s",
                 source,
                 template.get("id", "?"),
                 template.get("name", "?"),
@@ -174,9 +174,9 @@ def validate_template(template: dict, source: str) -> list[str]:
 
 
 def collect_templates(token: str, yml_files: list[str]) -> tuple[list[dict], dict]:
-    """Liest alle YAML-Dateien, validiert und dedupliziert nach 'id'.
-    Gibt (gültige_templates, statistik) zurück."""
-    seen_ids: dict[str, str] = {}  # id -> Quell-Datei des ersten Fundes
+    """Reads all YAML files, validates and deduplicates by 'id'.
+    Returns (valid_templates, stats)."""
+    seen_ids: dict[str, str] = {}  # id -> source file of the first occurrence
     valid_templates: list[dict] = []
 
     stats = {
@@ -189,27 +189,27 @@ def collect_templates(token: str, yml_files: list[str]) -> tuple[list[dict], dic
     }
 
     for yml_path in yml_files:
-        log.info("Lese: %s", yml_path)
+        log.info("Reading: %s", yml_path)
         try:
             raw = get_raw_file(token, yml_path)
             parsed = yaml.safe_load(raw)
         except requests.RequestException as e:
-            log.error("  Konnte Datei nicht laden: %s", e)
+            log.error("  Could not load file: %s", e)
             stats["files_failed"] += 1
             continue
         except yaml.YAMLError as e:
-            log.error("  Konnte YAML nicht parsen: %s", e)
+            log.error("  Could not parse YAML: %s", e)
             stats["files_failed"] += 1
             continue
 
         if not isinstance(parsed, dict) or "templates" not in parsed:
-            log.warning("  Kein 'templates'-Schlüssel gefunden, übersprungen.")
+            log.warning("  No 'templates' key found, skipped.")
             stats["files_failed"] += 1
             continue
 
         templates = parsed["templates"]
         if not isinstance(templates, list):
-            log.warning("  'templates' ist keine Liste, übersprungen.")
+            log.warning("  'templates' is not a list, skipped.")
             stats["files_failed"] += 1
             continue
 
@@ -224,8 +224,8 @@ def collect_templates(token: str, yml_files: list[str]) -> tuple[list[dict], dic
             template_id = template["id"]
             if template_id in seen_ids:
                 log.warning(
-                    "  Duplikat-ID '%s' (name=%s) in %s — bereits vorhanden aus %s, "
-                    "wird übersprungen.",
+                    "  Duplicate id '%s' (name=%s) in %s - already present "
+                    "from %s, skipping.",
                     template_id,
                     template.get("name", "?"),
                     yml_path,
@@ -234,8 +234,8 @@ def collect_templates(token: str, yml_files: list[str]) -> tuple[list[dict], dic
                 stats["templates_duplicate"] += 1
                 continue
 
-            # Merkt sich den Ordner der Quell-YAML, damit der Downloader später
-            # weiß, in welchem Verzeichnis die zugehörige .ova-Datei liegt.
+            # Remember the source YAML's folder, so the downloader later
+            # knows which directory the associated .ova file lives in.
             template["_source_dir"] = yml_path.rsplit("/", 1)[0] if "/" in yml_path else ""
 
             seen_ids[template_id] = yml_path
@@ -255,47 +255,47 @@ def write_output(templates: list[dict]) -> None:
     tmp_path = OUTPUT_FILE.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         yaml.dump(output, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
-    tmp_path.replace(OUTPUT_FILE)  # atomarer Austausch, kein halbfertiges File bei Absturz
+    tmp_path.replace(OUTPUT_FILE)  # atomic swap, no half-written file on a crash
 
 
 def main() -> int:
     log.info("=" * 60)
-    log.info("Starte Template-Sammlung")
+    log.info("Starting template collection")
 
     if not PASSWORD:
         log.error(
-            "FILEBROWSER_PASSWORD ist nicht gesetzt. Abbruch. "
-            "Bitte per Umgebungsvariable setzen."
+            "FILEBROWSER_PASSWORD is not set. Aborting. "
+            "Please set it via an environment variable."
         )
         return 1
 
     try:
         token = login()
     except requests.RequestException:
-        log.error("Abbruch: Login fehlgeschlagen.")
+        log.error("Aborting: login failed.")
         return 1
 
-    log.info("Suche nach .yml/.yaml Dateien im Share...")
+    log.info("Searching for .yml/.yaml files on the share...")
     yml_files = find_yml_files(token)
-    log.info("%d YAML-Datei(en) gefunden.", len(yml_files))
+    log.info("%d YAML file(s) found.", len(yml_files))
 
     templates, stats = collect_templates(token, yml_files)
 
     try:
         write_output(templates)
     except OSError as e:
-        log.error("Konnte Ausgabedatei nicht schreiben: %s", e)
+        log.error("Could not write output file: %s", e)
         return 1
 
     log.info("-" * 60)
-    log.info("Zusammenfassung:")
-    log.info("  Dateien gesamt:        %d", stats["files_total"])
-    log.info("  Dateien fehlgeschlagen: %d", stats["files_failed"])
-    log.info("  Templates gefunden:    %d", stats["templates_found"])
-    log.info("  Templates gültig:      %d", stats["templates_valid"])
-    log.info("  Templates ungültig:    %d", stats["templates_invalid"])
-    log.info("  Duplikate übersprungen: %d", stats["templates_duplicate"])
-    log.info("  Geschrieben nach:      %s", OUTPUT_FILE)
+    log.info("Summary:")
+    log.info("  Files total:            %d", stats["files_total"])
+    log.info("  Files failed:           %d", stats["files_failed"])
+    log.info("  Templates found:        %d", stats["templates_found"])
+    log.info("  Templates valid:        %d", stats["templates_valid"])
+    log.info("  Templates invalid:      %d", stats["templates_invalid"])
+    log.info("  Duplicates skipped:     %d", stats["templates_duplicate"])
+    log.info("  Written to:             %s", OUTPUT_FILE)
     log.info("=" * 60)
 
     return 0
