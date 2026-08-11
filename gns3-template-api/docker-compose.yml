@@ -1,0 +1,12 @@
+services:
+  gns3-template-api:
+    build:
+      context: .
+      dockerfile: gns3_api.Dockerfile
+    container_name: gns3-template-api
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      # Nur lesend: die API braucht nur die vom Collector erzeugte Datei
+      - /home/junioradmin/gns3-reader/data:/data:ro

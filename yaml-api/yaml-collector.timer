@@ -1,0 +1,13 @@
+[Unit]
+Description=Startet yaml-collector.service alle 15 Minuten
+
+[Timer]
+# Alle 15 Minuten
+OnCalendar=*:0/15
+# Falls der Server zum geplanten Zeitpunkt aus war, sofort nach Boot nachholen
+Persistent=true
+# Etwas Zufalls-Verzögerung, um Lastspitzen zu vermeiden
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

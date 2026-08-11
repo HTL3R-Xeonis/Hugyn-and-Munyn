@@ -1,0 +1,14 @@
+# Nur anzeigen, was gefunden würde
+./venv/bin/python download_template.py --name mint --list-only
+
+# Interaktiv: zeigt Treffer, fragt nach Auswahl, lädt dann herunter
+./venv/bin/python download_template.py --name mint21
+
+# Nach Tags suchen
+./venv/bin/python download_template.py --tags linux,gui,host
+
+# Kombiniert
+./venv/bin/python download_template.py --name mint --tags host
+
+# Automatisch besten Treffer ohne Rückfrage laden, in bestimmten Ordner
+./venv/bin/python download_template.py --name mint21 --yes --download-dir /home/junioradmin/downloads

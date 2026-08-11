@@ -1,0 +1,15 @@
+[Unit]
+Description=Sammelt Template-YAML-Dateien vom NFS-Share via Filebrowser-API
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=junioradmin
+Group=junioradmin
+WorkingDirectory=/home/junioradmin/yaml-api
+
+# Passwort NICHT hier eintragen, sondern in EnvironmentFile auslagern
+EnvironmentFile=/home/junioradmin/yaml-api/.env
+
+ExecStart=/home/junioradmin/yaml-api/venv/bin/python /home/junioradmin/yaml-api/collect_templates.py

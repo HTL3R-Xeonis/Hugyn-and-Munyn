@@ -1,0 +1,17 @@
+services:
+  template-api:
+    build: .
+    container_name: template-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Nur lesend: die API braucht nur templates.yml, nicht das ganze NFS-Share
+      - /home/junioradmin/yaml-api/data:/data:ro
+    environment:
+      - FILEBROWSER_URL=http://10.20.20.171:4000
+      - FILEBROWSER_USER=admin
+      - FILEBROWSER_PASSWORD=${FILEBROWSER_PASSWORD}
+    env_file:
+      - .env
+

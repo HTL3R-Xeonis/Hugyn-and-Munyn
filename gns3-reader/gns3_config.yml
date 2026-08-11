@@ -1,0 +1,24 @@
+# Konfiguration für read_gns3_templates.py
+# Für jeden GNS3-Server, der ausgelesen werden soll, einen Eintrag anlegen.
+# 'username'/'password' nur nötig, falls auf dem GNS3-Server
+# "Enable HTTP authentication" aktiviert ist - sonst einfach weglassen.
+
+servers:
+  - name: gns3-server-1
+    host: 10.20.20.221
+    port: 80
+    # username: admin
+    # password: geheim
+
+  - name: gns3-server-2
+    host: 10.20.20.231
+    port: 80
+
+# Wohin die zusammengefasste Ausgabe geschrieben werden soll
+output_file: /home/junioradmin/gns3-reader/data/gns3_templates.yml
+
+# Wohin geloggt werden soll
+log_file: /home/junioradmin/gns3-reader/logs/read_gns3.log
+
+# Timeout pro HTTP-Request in Sekunden
+request_timeout: 15

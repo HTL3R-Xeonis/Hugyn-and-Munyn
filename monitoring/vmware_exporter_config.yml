@@ -1,0 +1,35 @@
+default:
+  vsphere_host: "10.20.20.211"
+  vsphere_user: "monitoring@vsphere.local"
+  vsphere_password: "REMOVED"
+  ignore_ssl: true
+  specs_size: 5000
+
+  fetch_custom_attributes: false
+  fetch_tags: false
+  fetch_alarms: true
+
+  collect_only:
+    vms: true
+    vmguests: true
+    hosts: true
+    datastores: true
+    snapshots: true
+
+esxi8:
+  vsphere_host: "10.20.20.83"
+  vsphere_user: "monitoring"
+  vsphere_password: "REMOVED"
+  ignore_ssl: true
+  specs_size: 5000
+
+  fetch_custom_attributes: false
+  fetch_tags: false
+  fetch_alarms: true
+
+  collect_only:
+    vms: true
+    vmguests: true
+    datastores: true
+    hosts: true
+    snapshots: true

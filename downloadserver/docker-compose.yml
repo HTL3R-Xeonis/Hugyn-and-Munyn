@@ -1,0 +1,10 @@
+services:
+  filebrowser:
+    image: filebrowser/filebrowser
+    container_name: filebrowser
+    restart: unless-stopped
+    ports:
+      - "4000:80"
+    volumes:
+      - /mnt/nfsshare:/srv
+      - ./filebrowser.db:/database.db

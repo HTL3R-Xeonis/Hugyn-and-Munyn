@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  graphite-exporter:
+    image: prom/graphite-exporter:latest
+    container_name: graphite-exporter
+    restart: unless-stopped
+    ports:
+      - "9108:9108"
+      - "9109:9109"
+
+  vmware-exporter:
+    image: pryorda/vmware_exporter:latest
+    container_name: vmware-exporter
+    restart: unless-stopped
+
+    ports:
+      - "9272:9272"
+
+    volumes:
+      - ./vmware_exporter_config.yml:/vmware_exporter_config.yml:ro
+
+    command:
+      - "-c"
+      - "/vmware_exporter_config.yml"
