@@ -190,6 +190,18 @@ def get_templates(
         if matches_filters(t, name, template_type, category, builtin, server)
     ]
 
+    # Surfaced directly on this endpoint (not just /api/servers) so a
+    # caller seeing an unexpectedly low/zero count doesn't have to make
+    # a second request to find out why - e.g. "count: 0" alone looks
+    # like a broken API, when the real cause (a configured server's
+    # GNS3 VM being powered off, its ESXi host unreachable, etc.) was
+    # sitting right there in the collector's own last run.
+    server_warnings = [
+        f"{s.get('name')}: {s.get('error') or s.get('status')}"
+        for s in data.get("servers", [])
+        if s.get("status") != "ok"
+    ]
+
     return {
         "count": len(filtered),
         "total_available": len(templates),
@@ -201,6 +213,7 @@ def get_templates(
             "server": server,
         },
         "templates": filtered,
+        "server_warnings": server_warnings,
     }
 
 
@@ -219,6 +232,8 @@ def get_servers():
                 "status": s.get("status"),
                 "template_count": len(s.get("templates", [])),
                 "error": s.get("error"),
+                "vm_name": s.get("vm_name"),
+                "vm_power_state": s.get("vm_power_state"),
             }
             for s in servers
         ],

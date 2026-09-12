@@ -168,13 +168,17 @@ def connect_esxi(host: str, username: str, password: str) -> vim.ServiceInstance
     )
 
 
-def find_gns3_vm_ip(
+def find_gns3_vm(
     instance: vim.ServiceInstance, vm_name: Optional[str], log: logging.Logger
-) -> Optional[str]:
+) -> Optional[vim.VirtualMachine]:
     """
-    Looks up the GNS3 VM on the given ESXi host and returns its current
-    IPv4 address - None if no unambiguous GNS3 VM is found, or it doesn't
-    (yet) report an IP via VMware Tools.
+    Looks up the GNS3 VM on the given ESXi host - None if no
+    unambiguous match is found. Split from IP extraction (see
+    extract_vm_ipv4) so callers can tell "no matching VM at all" apart
+    from "found it, but it has no reachable IP yet" (e.g. powered off) -
+    collapsing both into one None used to make read_server() report the
+    same generic "gns3_vm_not_found" status either way, which is
+    genuinely misleading when the VM exists and is simply off.
     :param vm_name: exact VM name, if given (gns3_vm_name in the config) -
         otherwise auto-detection just like topologybuilder: name contains
         "gns3" (case-insensitive), backup VMs (name ends in
@@ -212,7 +216,14 @@ def find_gns3_vm_ip(
             log.warning("  No GNS3 VM found on this ESXi host.")
             return None
 
-    vm = matches[0]
+    return matches[0]
+
+
+def extract_vm_ipv4(vm: vim.VirtualMachine, log: logging.Logger) -> Optional[str]:
+    """Returns the first usable IPv4 address VMware Tools reports for
+    vm (skipping loopback/link-local/multicast), or None if it hasn't
+    reported one yet - normal right after boot, or permanent if the VM
+    is powered off."""
     for nic in vm.guest.net or []:
         for address in nic.ipAddress or []:
             try:
@@ -225,8 +236,6 @@ def find_gns3_vm_ip(
                 continue
             log.info("  GNS3 VM '%s' found, IP: %s", vm.name, address)
             return address
-
-    log.warning("  GNS3 VM '%s' found, but no IP reported yet.", vm.name)
     return None
 
 
@@ -266,12 +275,29 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
         return result
 
     try:
-        host = find_gns3_vm_ip(instance, gns3_vm_name, log)
+        vm = find_gns3_vm(instance, gns3_vm_name, log)
+        host = extract_vm_ipv4(vm, log) if vm is not None else None
     finally:
         Disconnect(instance)
 
-    if host is None:
+    if vm is None:
         result["status"] = "gns3_vm_not_found"
+        return result
+
+    if host is None:
+        power_state = str(vm.runtime.powerState)
+        log.warning(
+            "  GNS3 VM '%s' found, but no IP reported yet (power state: %s).",
+            vm.name, power_state,
+        )
+        result["status"] = "gns3_vm_no_ip"
+        result["vm_name"] = vm.name
+        result["vm_power_state"] = power_state
+        result["error"] = (
+            f"GNS3 VM '{vm.name}' was found but has no reported IPv4 address yet "
+            f"(power state: {power_state}) - if it's powered off, start it; "
+            f"if it's booting, wait for VMware Tools to report an IP."
+        )
         return result
 
     result["host"] = host
