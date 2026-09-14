@@ -276,7 +276,18 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
 
     try:
         vm = find_gns3_vm(instance, gns3_vm_name, log)
-        host = extract_vm_ipv4(vm, log) if vm is not None else None
+        host = None
+        vm_name = None
+        power_state = None
+        if vm is not None:
+            # Grabbed here, still inside the connected session - vm's
+            # properties (name, runtime.powerState) are fetched lazily
+            # over that session, so reading them after Disconnect()
+            # below raises vim.fault.NotAuthenticated.
+            vm_name = vm.name
+            host = extract_vm_ipv4(vm, log)
+            if host is None:
+                power_state = str(vm.runtime.powerState)
     finally:
         Disconnect(instance)
 
@@ -285,16 +296,15 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
         return result
 
     if host is None:
-        power_state = str(vm.runtime.powerState)
         log.warning(
             "  GNS3 VM '%s' found, but no IP reported yet (power state: %s).",
-            vm.name, power_state,
+            vm_name, power_state,
         )
         result["status"] = "gns3_vm_no_ip"
-        result["vm_name"] = vm.name
+        result["vm_name"] = vm_name
         result["vm_power_state"] = power_state
         result["error"] = (
-            f"GNS3 VM '{vm.name}' was found but has no reported IPv4 address yet "
+            f"GNS3 VM '{vm_name}' was found but has no reported IPv4 address yet "
             f"(power state: {power_state}) - if it's powered off, start it; "
             f"if it's booting, wait for VMware Tools to report an IP."
         )
