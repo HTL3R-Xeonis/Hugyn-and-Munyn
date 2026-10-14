@@ -19,14 +19,6 @@
 # enabled on the GNS3 server ITSELF (not ESXi) - otherwise just omit them.
 
 servers:
-  - name: gns3-server-1
-    esxi_host: 10.20.20.201
-    esxi_username: root
-    port: 80
-    # gns3_vm_name: GNS3
-    # username: admin
-    # password: secret
-
   - name: gns3-server-2
     esxi_host: 10.20.20.202
     esxi_username: root
