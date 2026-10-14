@@ -6,7 +6,8 @@ actually present (pulled) on that server.
 
 Each server entry in the config gives an ESXi host, not a GNS3 server IP
 directly - the GNS3 VM on that host is looked up fresh via the ESXi API on
-every run (name contains "gns3") and its current IP is used, instead of
+every run (name contains "gns" and guest OS is Ubuntu Linux (64-bit)) and
+its current IP is used, instead of
 relying on a hardcoded, potentially stale IP (GNS3 VMs often get their IP
 via DHCP, and a topologybuilder '--fresh-gns3-vm' run replaces the VM
 entirely - both make a static IP unreliable). Because of this it also needs
@@ -47,6 +48,27 @@ ESXI_PORT = 443
 # excluded from auto-detection so a powered-off backup is never mistaken
 # for the live GNS3 VM. Same pattern topologybuilder itself uses.
 _BACKUP_VM_NAME_PATTERN = re.compile(r"-backup-\d{14}")
+
+# Auto-detection of the GNS3 VM requires its name to contain this
+# (case-insensitive) - "gns" rather than "gns3", since the real VM is
+# called e.g. "GNS-VM-1" - AND its guest OS to be Ubuntu Linux (64-bit),
+# which is how ESXi reports guestId "ubuntu64Guest". The OS requirement
+# keeps an unrelated VM that merely has "gns" in its name from being
+# picked up. Only applies to auto-detection: an explicit gns3_vm_name in
+# the config always wins and is not checked against the guest OS.
+_GNS3_VM_NAME_FRAGMENT = "gns"
+_GNS3_VM_GUEST_ID = "ubuntu64Guest"
+
+
+def _is_gns3_vm_candidate(vm: vim.VirtualMachine) -> bool:
+    """True if vm's name contains "gns" (case-insensitive), it isn't a
+    backup VM, and ESXi reports its guest OS as Ubuntu Linux (64-bit)."""
+    if _GNS3_VM_NAME_FRAGMENT not in vm.name.lower():
+        return False
+    if _BACKUP_VM_NAME_PATTERN.search(vm.name):
+        return False
+    config = vm.config  # None for VMs whose config can't be read (e.g. orphaned)
+    return config is not None and config.guestId == _GNS3_VM_GUEST_ID
 
 
 def setup_logging(log_file: Optional[str]) -> logging.Logger:
@@ -180,8 +202,8 @@ def find_gns3_vm(
     same generic "gns3_vm_not_found" status either way, which is
     genuinely misleading when the VM exists and is simply off.
     :param vm_name: exact VM name, if given (gns3_vm_name in the config) -
-        otherwise auto-detection just like topologybuilder: name contains
-        "gns3" (case-insensitive), backup VMs (name ends in
+        otherwise auto-detection: name contains "gns" (case-insensitive),
+        guest OS is Ubuntu Linux (64-bit), backup VMs (name ends in
         "-backup-<timestamp>") are excluded, and a guess is only made if
         exactly one candidate remains.
     """
@@ -200,11 +222,7 @@ def find_gns3_vm(
             log.warning("  GNS3 VM '%s' not found.", vm_name)
             return None
     else:
-        matches = [
-            vm
-            for vm in all_vms
-            if "gns3" in vm.name.lower() and not _BACKUP_VM_NAME_PATTERN.search(vm.name)
-        ]
+        matches = [vm for vm in all_vms if _is_gns3_vm_candidate(vm)]
         if len(matches) > 1:
             log.warning(
                 "  Multiple GNS3 VMs found (%s) - skipping, set gns3_vm_name "
@@ -213,7 +231,11 @@ def find_gns3_vm(
             )
             return None
         if not matches:
-            log.warning("  No GNS3 VM found on this ESXi host.")
+            log.warning(
+                "  No GNS3 VM found on this ESXi host (looked for a non-backup "
+                "VM with '%s' in its name and guest OS Ubuntu Linux (64-bit)).",
+                _GNS3_VM_NAME_FRAGMENT,
+            )
             return None
 
     return matches[0]

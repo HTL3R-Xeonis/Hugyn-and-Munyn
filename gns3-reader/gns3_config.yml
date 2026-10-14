@@ -2,13 +2,15 @@
 #
 # For every ESXi host whose GNS3 VM should be read, add an entry under
 # 'servers'. The GNS3 VM is looked up fresh via the ESXi API on EVERY run
-# (name contains "gns3", backup VMs with "-backup-<timestamp>" in the name
-# are excluded) and its current IP is read - a hardcoded 'host:' is
+# (name contains "gns" AND guest OS is Ubuntu Linux (64-bit); backup VMs
+# with "-backup-<timestamp>" in the name are excluded) and its current IP
+# is read - a hardcoded 'host:' is
 # deliberately NO LONGER supported, since a GNS3 VM's IP can change via
 # DHCP and a topologybuilder '--fresh-gns3-vm' run creates a completely
 # new VM.
-# Optionally give 'gns3_vm_name' if "gns3" appears in more than one VM name
-# on a host, which would otherwise make auto-detection ambiguous.
+# Optionally give 'gns3_vm_name' if more than one VM on a host matches the
+# rule above, which would otherwise make auto-detection ambiguous - an
+# explicit name is used as-is, without the guest-OS check.
 #
 # The ESXi password is NOT entered here, but provided via the ESXI_PASSWORD
 # environment variable (see .env.example) - applies equally to every ESXi
