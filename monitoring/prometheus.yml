@@ -18,6 +18,7 @@ scrape_configs:
         - '10.20.20.177:9100'
         - '10.20.20.178:9100'
         - '10.20.20.179:9100'
+        - '10.20.20.182:9100'
 
   # Devices that cannot run a node exporter are checked from the outside by the blackbox exporter.
   # To monitor another one, add a target to the matching job (or a new job) and reload Prometheus:
@@ -52,7 +53,7 @@ scrape_configs:
         labels:
           name: 'GNS3 VM'
           role: 'lab'
-      - targets: ['10.20.20.176']
+      - targets: ['10.20.20.182']
         labels:
           name: 'LLM backup server'
           role: 'llm'
@@ -120,7 +121,7 @@ scrape_configs:
     params:
       module: [tcp_connect]
     static_configs:
-      - targets: ['10.20.20.176:22']
+      - targets: ['10.20.20.182:22']
         labels:
           name: 'LLM backup server SSH'
           role: 'llm'
