@@ -11,13 +11,126 @@ scrape_configs:
       - targets:
         - '10.20.20.81:9100'
         - '10.20.20.85:9100'
-        - '10.20.20.90:9100'
         - '10.20.20.171:9100'
         - '10.20.20.172:9100'
         - '10.20.20.173:9100'
         - '10.20.20.174:9100'
+        - '10.20.20.177:9100'
         - '10.20.20.178:9100'
         - '10.20.20.179:9100'
+
+  # Devices that cannot run a node exporter are checked from the outside by the blackbox exporter.
+  # To monitor another one, add a target to the matching job (or a new job) and reload Prometheus:
+  #   docker kill -s HUP prometheus
+  # Query: probe_success{job=~"probe_.*"} (1 = reachable), probe_duration_seconds, probe_http_status_code.
+  - job_name: 'probe_icmp'
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets: ['10.20.20.90']
+        labels:
+          name: 'EMC Unisphere storage'
+          role: 'storage'
+      - targets: ['10.20.20.83']
+        labels:
+          name: 'ESXi Dell host'
+          role: 'hypervisor'
+      - targets: ['10.20.20.202']
+        labels:
+          name: 'ESXi blade 3'
+          role: 'hypervisor'
+      - targets: ['10.20.20.211']
+        labels:
+          name: 'vCenter'
+          role: 'hypervisor'
+      - targets: ['10.20.20.180']
+        labels:
+          name: 'TrueNAS'
+          role: 'storage'
+      - targets: ['10.20.20.227']
+        labels:
+          name: 'GNS3 VM'
+          role: 'lab'
+      - targets: ['10.20.20.176']
+        labels:
+          name: 'LLM backup server'
+          role: 'llm'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: 'probe_https'
+    metrics_path: /probe
+    params:
+      module: [https_insecure]
+    static_configs:
+      - targets: ['https://10.20.20.83/']
+        labels:
+          name: 'ESXi Dell host'
+          role: 'hypervisor'
+      - targets: ['https://10.20.20.202/']
+        labels:
+          name: 'ESXi blade 3'
+          role: 'hypervisor'
+      - targets: ['https://10.20.20.211/']
+        labels:
+          name: 'vCenter'
+          role: 'hypervisor'
+      - targets: ['https://10.20.20.180/']
+        labels:
+          name: 'TrueNAS'
+          role: 'storage'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: 'probe_http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      # the EMC array only speaks a TLS version too old for the exporter ("handshake failure"), its port 80 serves the same page
+      - targets: ['http://10.20.20.90/']
+        labels:
+          name: 'EMC Unisphere storage'
+          role: 'storage'
+      - targets: ['http://10.20.20.227/v2/version']
+        labels:
+          name: 'GNS3 server API'
+          role: 'lab'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: 'probe_tcp'
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets: ['10.20.20.176:22']
+        labels:
+          name: 'LLM backup server SSH'
+          role: 'llm'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
 
   - job_name: "truenas"
     static_configs:

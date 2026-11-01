@@ -1,0 +1,26 @@
+# Probe modules for the blackbox exporter. Used by the probe_* jobs in prometheus.yml for devices that
+# cannot run a node exporter (storage arrays, hypervisors, appliances), so they are checked from outside.
+modules:
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip4
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+  http_2xx:
+    prober: http
+    timeout: 8s
+    http:
+      preferred_ip_protocol: ip4
+  # management pages with self-signed certificates (ESXi, vCenter, TrueNAS, EMC Unisphere)
+  https_insecure:
+    prober: http
+    timeout: 8s
+    http:
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: true

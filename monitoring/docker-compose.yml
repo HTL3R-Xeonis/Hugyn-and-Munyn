@@ -39,3 +39,16 @@ services:
     command:
       - "-c"
       - "/vmware_exporter_config.yml"
+
+  # Checks devices from the outside that cannot run a node exporter (see the probe_* jobs in prometheus.yml).
+  # ICMP needs NET_RAW.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: blackbox-exporter
+    restart: unless-stopped
+    cap_add:
+      - NET_RAW
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./blackbox.yml:/etc/blackbox_exporter/config.yml:ro
