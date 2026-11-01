@@ -11,11 +11,18 @@ GRAFANA="${1:-http://10.20.20.171:3000}"
 USER_NAME="${2:-admin}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
+if ! curl -fsS --connect-timeout 5 -m 10 -o /dev/null "$GRAFANA/api/health"; then
+  echo "Grafana unter ${GRAFANA} nicht erreichbar. Von ausserhalb des Labs z.B. ueber einen SSH-Tunnel:" >&2
+  echo "  ssh -N -L 3300:localhost:3000 -J jumphost junioradmin@10.20.20.171   # in einem zweiten Terminal" >&2
+  echo "  ./import_dashboard.sh http://localhost:3300" >&2
+  exit 1
+fi
+
 read -rs -p "Passwort für ${USER_NAME} an ${GRAFANA}: " PW
 echo
 
 api() {
-  curl -fsS -K <(printf 'user = "%s:%s"\n' "$USER_NAME" "$PW") -H 'Content-Type: application/json' "$@"
+  curl -fsS --connect-timeout 5 -m 30 -K <(printf 'user = "%s:%s"\n' "$USER_NAME" "$PW") -H 'Content-Type: application/json' "$@"
 }
 
 ds_uid="$(api "$GRAFANA/api/datasources" | python3 -c '
