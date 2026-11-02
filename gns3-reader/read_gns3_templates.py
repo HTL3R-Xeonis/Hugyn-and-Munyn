@@ -14,8 +14,15 @@ entirely - both make a static IP unreliable). Because of this it also needs
 pyvmomi in addition to requests/pyyaml, and an ESXi password via the
 ESXI_PASSWORD environment variable (see .env.example).
 
+With --profiles-dir the list of servers is not taken from the config file but from the host profiles of
+TopologyOperator/Ginnungagap (its settings_profiles folder): one server per profile with an esxi.ip, so a host is
+entered in one place only. The ESXi password of such a host is the one stored for it by the app
+(<profiles-dir>/.secrets/<profile>.json, key esxi_password), otherwise ESXI_PASSWORD as before. The config file is still
+read for output_file, log_file and request_timeout.
+
 Usage:
     ./venv/bin/python read_gns3_templates.py --config gns3_config.yml
+    ./venv/bin/python read_gns3_templates.py --config gns3_config.yml --profiles-dir /data/settings_profiles
 
 Install dependencies:
     pip3 install -r requirements.txt
@@ -25,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import json
 import logging
 import os
 import re
@@ -97,7 +105,56 @@ def setup_logging(log_file: Optional[str]) -> logging.Logger:
     return logger
 
 
-def load_config(config_path: str) -> dict:
+def _stored_esxi_password(profiles_dir: Path, profile_name: str) -> str | None:
+    """The ESXi password the app stored for this profile, if any (never logged)."""
+    try:
+        data = json.loads((profiles_dir / ".secrets" / f"{profile_name}.json").read_text())
+    except (OSError, ValueError):
+        return None
+    password = data.get("esxi_password") if isinstance(data, dict) else None
+    return password if isinstance(password, str) and password else None
+
+
+def servers_from_profiles(profiles_dir: str, log: logging.Logger) -> list[dict]:
+    """
+    One server entry per host profile (*.yml/*.yaml) that names an esxi.ip, in the shape the config file's 'servers' use.
+    A host that two profiles share (same ESXi IP and GNS3 VM name) appears once. Unreadable or incomplete profiles are
+    skipped with a warning. The entry carries the stored ESXi password in 'esxi_password' when there is one.
+    """
+    root = Path(profiles_dir)
+    servers: list[dict] = []
+    seen: set[tuple] = set()
+    for path in sorted([*root.glob("*.yml"), *root.glob("*.yaml")]):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as e:
+            log.warning("Profile %s skipped, could not be read: %s", path.name, e)
+            continue
+        esxi = data.get("esxi") if isinstance(data, dict) else None
+        if not isinstance(esxi, dict) or not esxi.get("ip"):
+            log.warning("Profile %s skipped: no esxi.ip", path.name)
+            continue
+        key = (str(esxi["ip"]), esxi.get("gns3_vm_name"))
+        if key in seen:
+            continue
+        seen.add(key)
+        gns3 = data.get("gns3") if isinstance(data.get("gns3"), dict) else {}
+        server = {
+            "name": path.stem,
+            "esxi_host": str(esxi["ip"]),
+            "esxi_username": esxi.get("username") or "root",
+            "port": gns3.get("port", 80),
+        }
+        if esxi.get("gns3_vm_name"):
+            server["gns3_vm_name"] = esxi["gns3_vm_name"]
+        stored = _stored_esxi_password(root, path.name)
+        if stored:
+            server["esxi_password"] = stored
+        servers.append(server)
+    return servers
+
+
+def load_config(config_path: str, need_servers: bool = True) -> dict:
     path = Path(config_path)
     if not path.exists():
         print(f"ERROR: config file not found: {path}", file=sys.stderr)
@@ -106,7 +163,12 @@ def load_config(config_path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    if not config or "servers" not in config or not config["servers"]:
+    config = config or {}
+    if not need_servers:
+        config.setdefault("servers", [])
+        return config
+
+    if "servers" not in config or not config["servers"]:
         print("ERROR: config contains no servers under 'servers'.", file=sys.stderr)
         sys.exit(1)
 
@@ -365,18 +427,31 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_CONFIG_PATH,
         help=f"Path to the config file (default: {DEFAULT_CONFIG_PATH})",
     )
+    parser.add_argument(
+        "--profiles-dir",
+        default=os.getenv("HOST_PROFILES_DIR"),
+        help="Take the servers from the host profiles in this folder instead of the config file's 'servers' "
+        "(default: the HOST_PROFILES_DIR environment variable, if set)",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    config = load_config(args.config)
+    config = load_config(args.config, need_servers=not args.profiles_dir)
 
     log = setup_logging(config.get("log_file"))
     timeout = config.get("request_timeout", DEFAULT_TIMEOUT)
 
+    if args.profiles_dir:
+        if not Path(args.profiles_dir).is_dir():
+            log.error("The profiles folder %s is not a directory. Aborting.", args.profiles_dir)
+            return 1
+        config["servers"] = servers_from_profiles(args.profiles_dir, log)
+        log.info("Using %d host profile(s) from %s", len(config["servers"]), args.profiles_dir)
+
     esxi_password = os.getenv("ESXI_PASSWORD")
-    if not esxi_password:
+    if not args.profiles_dir and not esxi_password:
         log.error(
             "ESXI_PASSWORD environment variable not set - cannot establish "
             "an ESXi connection. See .env.example."
@@ -388,7 +463,23 @@ def main() -> int:
 
     all_results = []
     for server_cfg in config["servers"]:
-        all_results.append(read_server(server_cfg, timeout, log, esxi_password))
+        password = server_cfg.get("esxi_password") or esxi_password
+        if not password:
+            # Only possible with profiles: this host has no stored password and ESXI_PASSWORD is not set either.
+            # Not worth aborting the other hosts for.
+            log.error("Server '%s': no ESXi password stored and ESXI_PASSWORD not set - skipped.", server_cfg["name"])
+            all_results.append(
+                {
+                    "name": server_cfg["name"],
+                    "esxi_host": server_cfg["esxi_host"],
+                    "port": server_cfg.get("port", 80),
+                    "status": "esxi_unreachable",
+                    "error": "no ESXi password stored for this host",
+                    "templates": [],
+                }
+            )
+            continue
+        all_results.append(read_server(server_cfg, timeout, log, password))
 
     output = {
         "version": 1,
