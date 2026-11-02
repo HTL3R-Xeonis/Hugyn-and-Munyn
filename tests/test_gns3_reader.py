@@ -222,13 +222,6 @@ def test_the_profiles_folder_can_come_from_the_environment(
     assert code == 0 and calls == [("a", "own-a")]
 
 
-def test_a_missing_profiles_folder_stops_the_run(reader, monkeypatch, tmp_path):
-    code, calls, output = _run(
-        reader, monkeypatch, tmp_path, "--profiles-dir", str(tmp_path / "nope")
-    )
-    assert code == 1 and calls == [] and not output.exists()
-
-
 def test_without_profiles_the_config_servers_and_the_environment_password_work_as_before(
     reader, monkeypatch, tmp_path
 ):
@@ -247,3 +240,16 @@ def test_without_profiles_a_missing_environment_password_still_aborts(
         reader, monkeypatch, tmp_path, servers=[{"name": "s1", "esxi_host": "10.9.9.9"}]
     )
     assert code == 1 and calls == [] and not output.exists()
+
+
+def test_a_missing_profiles_folder_means_no_hosts_not_a_failed_run(
+    reader, monkeypatch, tmp_path
+):
+    # a fresh machine: the app has not saved a host profile yet, so its folder does not exist
+    code, calls, output = _run(
+        reader, monkeypatch, tmp_path, "--profiles-dir", str(tmp_path / "not-there")
+    )
+
+    assert code == 0
+    assert calls == []
+    assert yaml.safe_load(output.read_text()) == {"version": 1, "servers": []}

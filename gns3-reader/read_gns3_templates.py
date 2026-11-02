@@ -452,13 +452,16 @@ def main() -> int:
     timeout = config.get("request_timeout", DEFAULT_TIMEOUT)
 
     if args.profiles_dir:
-        if not Path(args.profiles_dir).is_dir():
-            log.error(
-                "The profiles folder %s is not a directory. Aborting.",
+        if Path(args.profiles_dir).is_dir():
+            config["servers"] = servers_from_profiles(args.profiles_dir, log)
+        else:
+            # The app creates this folder when the first host profile is saved: until then there are simply no hosts, and
+            # an empty list is written so the template API is healthy instead of waiting for a host.
+            log.warning(
+                "The profiles folder %s does not exist (yet) - no hosts.",
                 args.profiles_dir,
             )
-            return 1
-        config["servers"] = servers_from_profiles(args.profiles_dir, log)
+            config["servers"] = []
         log.info(
             "Using %d host profile(s) from %s",
             len(config["servers"]),
