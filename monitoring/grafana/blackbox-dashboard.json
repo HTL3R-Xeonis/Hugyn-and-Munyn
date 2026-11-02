@@ -25,7 +25,7 @@
   ],
   "title": "Geräte ohne Node-Exporter (Blackbox)",
   "uid": "blackbox-geraete",
-  "description": "Erreichbarkeit der Geräte, auf denen kein node_exporter läuft (Speichersystem, ESXi-Hosts, vCenter, TrueNAS, GNS3-VM, LLM-Backup), geprüft von außen per Blackbox-Exporter.",
+  "description": "Erreichbarkeit der Geräte, auf denen kein node_exporter läuft (Speichersysteme, vCenter, TrueNAS, LLM-Backup; die ESXi-Hosts deckt der VMware-Exporter ab, Lab-VMs werden nicht überwacht, weil sich ihre Adresse ändert), geprüft von außen per Blackbox-Exporter.",
   "tags": [
     "blackbox",
     "geraete",
