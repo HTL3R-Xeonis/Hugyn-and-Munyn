@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Collects all template YAML files from the NFS share (via the Filebrowser API),
-validates them, detects duplicates, and writes a combined templates.yml.
+Collects all template YAML files from the NFS share (via the Filebrowser API, or straight from a local
+directory when TEMPLATE_STORE_DIR is set), validates them, detects duplicates, and writes a combined templates.yml.
 
 Expected format for each source file:
 
@@ -34,8 +34,16 @@ USERNAME = os.environ.get("FILEBROWSER_USER", "admin")
 #   export FILEBROWSER_PASSWORD='YourPassword!123'
 PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
 
-OUTPUT_FILE = Path("/home/junioradmin/yaml-api/data/templates.yml")
-LOG_FILE = Path("/home/junioradmin/yaml-api/logs/collect.log")
+# Where the templates are read from: a directory (e.g. the NFS share mounted on this machine) when
+# TEMPLATE_STORE_DIR is set - no Filebrowser needed then - otherwise through Filebrowser as before.
+STORE_DIR = os.environ.get("TEMPLATE_STORE_DIR", "")
+
+OUTPUT_FILE = Path(
+    os.environ.get("TEMPLATES_OUTPUT_FILE", "/home/junioradmin/yaml-api/data/templates.yml")
+)
+LOG_FILE = Path(
+    os.environ.get("TEMPLATES_LOG_FILE", "/home/junioradmin/yaml-api/logs/collect.log")
+)
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
 REQUEST_TIMEOUT = 15
@@ -60,6 +68,8 @@ def setup_logging() -> logging.Logger:
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger("template_collector")
+    if logger.handlers:  # already set up (main() ran before in this process)
+        return logger
     logger.setLevel(LOG_LEVEL)
     logger.propagate = False
 
@@ -82,7 +92,8 @@ def setup_logging() -> logging.Logger:
     return logger
 
 
-log = setup_logging()
+# The handlers (and the log directory) are only created when the collector actually runs, see main().
+log = logging.getLogger("template_collector")
 
 
 def login() -> str:
@@ -135,6 +146,40 @@ def find_yml_files(token: str, path: str = "") -> list[str]:
     return yml_files
 
 
+class FilebrowserSource:
+    """The YAML files of the share, read through Filebrowser's API."""
+
+    def __init__(self) -> None:
+        self.token = login()
+
+    def find_yml_files(self) -> list[str]:
+        return find_yml_files(self.token)
+
+    def read(self, path: str) -> str:
+        return get_raw_file(self.token, path)
+
+
+class DirectorySource:
+    """The YAML files below a local directory (the share mounted here); paths are relative, with "/"."""
+
+    def __init__(self, root: str | Path) -> None:
+        self.root = Path(root)
+
+    def find_yml_files(self) -> list[str]:
+        found = []
+        for folder, _dirs, names in os.walk(self.root):  # symlinked folders are not followed
+            for name in names:
+                if name.lower().endswith((".yml", ".yaml")):
+                    found.append((Path(folder) / name).relative_to(self.root).as_posix())
+        return sorted(found)
+
+    def read(self, path: str) -> str:
+        file = (self.root / path).resolve()
+        if not file.is_relative_to(self.root.resolve()):
+            raise OSError(f"{path!r} is outside of the template directory")
+        return file.read_text(encoding="utf-8")
+
+
 def validate_template(template: dict, source: str) -> list[str]:
     """Checks a single template for required fields and rough type
     consistency. Returns a list of error messages (empty = valid)."""
@@ -173,7 +218,7 @@ def validate_template(template: dict, source: str) -> list[str]:
     return errors
 
 
-def collect_templates(token: str, yml_files: list[str]) -> tuple[list[dict], dict]:
+def collect_templates(source, yml_files: list[str]) -> tuple[list[dict], dict]:
     """Reads all YAML files, validates and deduplicates by 'id'.
     Returns (valid_templates, stats)."""
     seen_ids: dict[str, str] = {}  # id -> source file of the first occurrence
@@ -191,9 +236,9 @@ def collect_templates(token: str, yml_files: list[str]) -> tuple[list[dict], dic
     for yml_path in yml_files:
         log.info("Reading: %s", yml_path)
         try:
-            raw = get_raw_file(token, yml_path)
+            raw = source.read(yml_path)
             parsed = yaml.safe_load(raw)
-        except requests.RequestException as e:
+        except (requests.RequestException, OSError, UnicodeDecodeError) as e:
             log.error("  Could not load file: %s", e)
             stats["files_failed"] += 1
             continue
@@ -259,27 +304,35 @@ def write_output(templates: list[dict]) -> None:
 
 
 def main() -> int:
+    setup_logging()
     log.info("=" * 60)
     log.info("Starting template collection")
 
-    if not PASSWORD:
-        log.error(
-            "FILEBROWSER_PASSWORD is not set. Aborting. "
-            "Please set it via an environment variable."
-        )
-        return 1
+    if STORE_DIR:
+        if not Path(STORE_DIR).is_dir():
+            log.error("TEMPLATE_STORE_DIR %s is not a directory. Aborting.", STORE_DIR)
+            return 1
+        log.info("Reading the templates from the directory %s", STORE_DIR)
+        source = DirectorySource(STORE_DIR)
+    else:
+        if not PASSWORD:
+            log.error(
+                "FILEBROWSER_PASSWORD is not set. Aborting. "
+                "Please set it via an environment variable."
+            )
+            return 1
 
-    try:
-        token = login()
-    except requests.RequestException:
-        log.error("Aborting: login failed.")
-        return 1
+        try:
+            source = FilebrowserSource()
+        except requests.RequestException:
+            log.error("Aborting: login failed.")
+            return 1
 
     log.info("Searching for .yml/.yaml files on the share...")
-    yml_files = find_yml_files(token)
+    yml_files = source.find_yml_files()
     log.info("%d YAML file(s) found.", len(yml_files))
 
-    templates, stats = collect_templates(token, yml_files)
+    templates, stats = collect_templates(source, yml_files)
 
     try:
         write_output(templates)

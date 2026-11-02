@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 import yaml
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -19,8 +19,12 @@ log = logging.getLogger("template_api")
 app = FastAPI(title="Template API", version="2.0")
 
 # ---------- Configuration ----------
-DATA_DIR = Path("/data")
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 TEMPLATES_FILE = DATA_DIR / "templates.yml"
+
+# When set, downloads are served straight from this directory (the share mounted on this machine) instead of being
+# proxied through Filebrowser. Unset keeps the Filebrowser behaviour.
+STORE_DIR = os.environ.get("TEMPLATE_STORE_DIR", "")
 
 FILEBROWSER_URL = os.environ.get("FILEBROWSER_URL", "http://10.20.20.171:4000")
 FILEBROWSER_USER = os.environ.get("FILEBROWSER_USER", "admin")
@@ -125,7 +129,22 @@ def build_remote_path(template: dict) -> str:
     return f"{source_dir}/{file_name}" if source_dir else file_name
 
 
+def local_download(template: dict) -> FileResponse:
+    """The template's file from the local store directory; never outside of it."""
+    store = Path(STORE_DIR).resolve()
+    path = (store / build_remote_path(template)).resolve()
+    if not path.is_relative_to(store):
+        raise HTTPException(400, "The template's file lies outside of the store.")
+    if not path.is_file():
+        raise HTTPException(404, f"The file of this template is not in the store: {template['file']}")
+    return FileResponse(
+        path, media_type="application/octet-stream", filename=template["file"]
+    )
+
+
 def proxy_download(template: dict) -> StreamingResponse:
+    if STORE_DIR:
+        return local_download(template)
     if not FILEBROWSER_PASSWORD:
         raise HTTPException(
             500, "FILEBROWSER_PASSWORD is not set on the API server."
@@ -151,6 +170,26 @@ def proxy_download(template: dict) -> StreamingResponse:
 @app.get("/")
 def root():
     return {"name": "Template API", "version": "2.0"}
+
+
+@app.get("/health")
+def health():
+    """Whether this service can do its job: the templates file is there and, with a local store, the directory too."""
+    problems = []
+    count = None
+    try:
+        count = len(load_templates())
+    except HTTPException as exc:
+        problems.append(str(exc.detail))
+    if STORE_DIR and not Path(STORE_DIR).is_dir():
+        problems.append(f"the template directory {STORE_DIR} is not there")
+    body = {
+        "status": "ok" if not problems else "degraded",
+        "templates": count,
+        "download": "directory" if STORE_DIR else "filebrowser",
+        "problems": problems,
+    }
+    return JSONResponse(body, status_code=503 if problems else 200)
 
 
 @app.get("/api/templates")

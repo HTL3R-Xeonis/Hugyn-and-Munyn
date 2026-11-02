@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
 import requests
 import yaml
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -15,7 +17,7 @@ log = logging.getLogger("gns3_template_api")
 
 app = FastAPI(title="GNS3 Template API", version="1.1")
 
-DATA_DIR = Path("/data")
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 TEMPLATES_FILE = DATA_DIR / "gns3_templates.yml"
 LIVE_REQUEST_TIMEOUT = 15
 
@@ -159,6 +161,24 @@ def get_live_templates(
 @app.get("/")
 def root():
     return {"name": "GNS3 Template API", "version": "1.0"}
+
+
+@app.get("/health")
+def health():
+    """Whether the collector's templates file is there and readable."""
+    try:
+        data = load_data()
+    except HTTPException as exc:
+        return JSONResponse(
+            {"status": "degraded", "templates": None, "problems": [str(exc.detail)]},
+            status_code=503,
+        )
+    return {
+        "status": "ok",
+        "templates": len(flatten_templates(data)),
+        "servers": len(data.get("servers", [])),
+        "problems": [],
+    }
 
 
 @app.get("/api/templates")
