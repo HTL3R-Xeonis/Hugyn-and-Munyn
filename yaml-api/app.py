@@ -4,7 +4,6 @@ import logging
 import os
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Optional
 
 import requests
 import yaml
@@ -40,9 +39,7 @@ REQUEST_TIMEOUT = 15
 # ---------- Helpers: load & score templates ----------
 def load_templates() -> list[dict]:
     if not TEMPLATES_FILE.exists():
-        raise HTTPException(
-            500, f"templates.yml not found at {TEMPLATES_FILE}"
-        )
+        raise HTTPException(500, f"templates.yml not found at {TEMPLATES_FILE}")
     with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return data.get("templates", []) if isinstance(data, dict) else []
@@ -67,7 +64,7 @@ def tag_similarity(query_tags: list[str], candidate_tags: list[str]) -> float:
 
 
 def score_template(
-    template: dict, name_query: Optional[str], tags_query: list[str]
+    template: dict, name_query: str | None, tags_query: list[str]
 ) -> float:
     has_name = bool(name_query)
     has_tags = bool(tags_query)
@@ -89,7 +86,7 @@ def score_template(
 
 
 def rank_templates(
-    templates: list[dict], name_query: Optional[str], tags_query: list[str]
+    templates: list[dict], name_query: str | None, tags_query: list[str]
 ) -> list[tuple[float, dict]]:
     scored = [(score_template(t, name_query, tags_query), t) for t in templates]
     scored.sort(key=lambda pair: pair[0], reverse=True)
@@ -136,7 +133,9 @@ def local_download(template: dict) -> FileResponse:
     if not path.is_relative_to(store):
         raise HTTPException(400, "The template's file lies outside of the store.")
     if not path.is_file():
-        raise HTTPException(404, f"The file of this template is not in the store: {template['file']}")
+        raise HTTPException(
+            404, f"The file of this template is not in the store: {template['file']}"
+        )
     return FileResponse(
         path, media_type="application/octet-stream", filename=template["file"]
     )
@@ -146,9 +145,7 @@ def proxy_download(template: dict) -> StreamingResponse:
     if STORE_DIR:
         return local_download(template)
     if not FILEBROWSER_PASSWORD:
-        raise HTTPException(
-            500, "FILEBROWSER_PASSWORD is not set on the API server."
-        )
+        raise HTTPException(500, "FILEBROWSER_PASSWORD is not set on the API server.")
 
     remote_path = build_remote_path(template)
     file_name = template["file"]
@@ -201,8 +198,8 @@ def list_templates():
 
 @app.get("/api/search")
 def search_templates(
-    name: Optional[str] = Query(None, description="Name to search for"),
-    tags: Optional[str] = Query(None, description="Comma-separated tags"),
+    name: str | None = Query(None, description="Name to search for"),
+    tags: str | None = Query(None, description="Comma-separated tags"),
     top: int = Query(5, ge=1, le=50),
     min_score: float = Query(0.0, ge=0.0, le=1.0),
 ):
@@ -236,8 +233,8 @@ def download_by_id(template_id: str):
 
 @app.get("/api/download")
 def download_by_query(
-    name: Optional[str] = Query(None),
-    tags: Optional[str] = Query(None),
+    name: str | None = Query(None),
+    tags: str | None = Query(None),
     min_score: float = Query(0.3, ge=0.0, le=1.0),
 ):
     """Finds the best match by name/tags and downloads it directly."""

@@ -40,7 +40,6 @@ import ssl
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
 
 import requests
 import yaml
@@ -79,7 +78,7 @@ def _is_gns3_vm_candidate(vm: vim.VirtualMachine) -> bool:
     return config is not None and config.guestId == _GNS3_VM_GUEST_ID
 
 
-def setup_logging(log_file: Optional[str]) -> logging.Logger:
+def setup_logging(log_file: str | None) -> logging.Logger:
     """Sets up logging to console + optionally a rotating log file."""
     logger = logging.getLogger("gns3_template_reader")
     logger.setLevel(logging.INFO)
@@ -108,7 +107,9 @@ def setup_logging(log_file: Optional[str]) -> logging.Logger:
 def _stored_esxi_password(profiles_dir: Path, profile_name: str) -> str | None:
     """The ESXi password the app stored for this profile, if any (never logged)."""
     try:
-        data = json.loads((profiles_dir / ".secrets" / f"{profile_name}.json").read_text())
+        data = json.loads(
+            (profiles_dir / ".secrets" / f"{profile_name}.json").read_text()
+        )
     except (OSError, ValueError):
         return None
     password = data.get("esxi_password") if isinstance(data, dict) else None
@@ -185,7 +186,9 @@ def load_config(config_path: str, need_servers: bool = True) -> dict:
     return config
 
 
-def get_templates(base_url: str, auth: Optional[tuple], timeout: int, log: logging.Logger) -> list[dict]:
+def get_templates(
+    base_url: str, auth: tuple | None, timeout: int, log: logging.Logger
+) -> list[dict]:
     """Fetches ALL templates from a GNS3 server (unfiltered, including builtins)."""
     url = f"{base_url}/v2/templates"
     resp = requests.get(url, auth=auth, timeout=timeout)
@@ -195,7 +198,9 @@ def get_templates(base_url: str, auth: Optional[tuple], timeout: int, log: loggi
     return templates
 
 
-def get_docker_images(base_url: str, auth: Optional[tuple], timeout: int, log: logging.Logger) -> list[dict]:
+def get_docker_images(
+    base_url: str, auth: tuple | None, timeout: int, log: logging.Logger
+) -> list[dict]:
     """Fetches the list of Docker images actually present on the compute."""
     url = f"{base_url}/v2/compute/docker/images"
     try:
@@ -253,8 +258,8 @@ def connect_esxi(host: str, username: str, password: str) -> vim.ServiceInstance
 
 
 def find_gns3_vm(
-    instance: vim.ServiceInstance, vm_name: Optional[str], log: logging.Logger
-) -> Optional[vim.VirtualMachine]:
+    instance: vim.ServiceInstance, vm_name: str | None, log: logging.Logger
+) -> vim.VirtualMachine | None:
     """
     Looks up the GNS3 VM on the given ESXi host - None if no
     unambiguous match is found. Split from IP extraction (see
@@ -303,7 +308,7 @@ def find_gns3_vm(
     return matches[0]
 
 
-def extract_vm_ipv4(vm: vim.VirtualMachine, log: logging.Logger) -> Optional[str]:
+def extract_vm_ipv4(vm: vim.VirtualMachine, log: logging.Logger) -> str | None:
     """Returns the first usable IPv4 address VMware Tools reports for
     vm (skipping loopback/link-local/multicast), or None if it hasn't
     reported one yet - normal right after boot, or permanent if the VM
@@ -323,7 +328,9 @@ def extract_vm_ipv4(vm: vim.VirtualMachine, log: logging.Logger) -> Optional[str
     return None
 
 
-def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_password: str) -> dict:
+def read_server(
+    server_cfg: dict, timeout: int, log: logging.Logger, esxi_password: str
+) -> dict:
     name = server_cfg.get("name", server_cfg["esxi_host"])
     esxi_host = server_cfg["esxi_host"]
     esxi_username = server_cfg.get("esxi_username", "root")
@@ -347,7 +354,7 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
         result["status"] = "esxi_unreachable"
         result["error"] = e.msg
         return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - deliberately broad, see below
         # Broader than just vim.fault.VimFault (login errors): SmartConnect
         # can also fail with other exception types on network problems
         # (host down, DNS, TLS handshake - socket/ssl level). A single
@@ -382,7 +389,8 @@ def read_server(server_cfg: dict, timeout: int, log: logging.Logger, esxi_passwo
     if host is None:
         log.warning(
             "  GNS3 VM '%s' found, but no IP reported yet (power state: %s).",
-            vm_name, power_state,
+            vm_name,
+            power_state,
         )
         result["status"] = "gns3_vm_no_ip"
         result["vm_name"] = vm_name
@@ -445,10 +453,17 @@ def main() -> int:
 
     if args.profiles_dir:
         if not Path(args.profiles_dir).is_dir():
-            log.error("The profiles folder %s is not a directory. Aborting.", args.profiles_dir)
+            log.error(
+                "The profiles folder %s is not a directory. Aborting.",
+                args.profiles_dir,
+            )
             return 1
         config["servers"] = servers_from_profiles(args.profiles_dir, log)
-        log.info("Using %d host profile(s) from %s", len(config["servers"]), args.profiles_dir)
+        log.info(
+            "Using %d host profile(s) from %s",
+            len(config["servers"]),
+            args.profiles_dir,
+        )
 
     esxi_password = os.getenv("ESXI_PASSWORD")
     if not args.profiles_dir and not esxi_password:
@@ -459,7 +474,9 @@ def main() -> int:
         return 1
 
     log.info("=" * 60)
-    log.info("Starting GNS3 template collection for %d server(s)", len(config["servers"]))
+    log.info(
+        "Starting GNS3 template collection for %d server(s)", len(config["servers"])
+    )
 
     all_results = []
     for server_cfg in config["servers"]:
@@ -467,7 +484,10 @@ def main() -> int:
         if not password:
             # Only possible with profiles: this host has no stored password and ESXI_PASSWORD is not set either.
             # Not worth aborting the other hosts for.
-            log.error("Server '%s': no ESXi password stored and ESXI_PASSWORD not set - skipped.", server_cfg["name"])
+            log.error(
+                "Server '%s': no ESXi password stored and ESXI_PASSWORD not set - skipped.",
+                server_cfg["name"],
+            )
             all_results.append(
                 {
                     "name": server_cfg["name"],
@@ -492,7 +512,9 @@ def main() -> int:
 
     tmp_path = output_path.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
-        yaml.dump(output, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        yaml.dump(
+            output, f, allow_unicode=True, sort_keys=False, default_flow_style=False
+        )
     tmp_path.replace(output_path)
 
     log.info("-" * 60)

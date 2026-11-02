@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import requests
 import yaml
@@ -23,15 +22,19 @@ LIVE_REQUEST_TIMEOUT = 15
 
 
 # ---------- Live query of any server given in the request ----------
-def live_get_templates(base_url: str, auth: Optional[tuple], timeout: int) -> list[dict]:
+def live_get_templates(base_url: str, auth: tuple | None, timeout: int) -> list[dict]:
     resp = requests.get(f"{base_url}/v2/templates", auth=auth, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
 
 
-def live_get_docker_images(base_url: str, auth: Optional[tuple], timeout: int) -> list[dict]:
+def live_get_docker_images(
+    base_url: str, auth: tuple | None, timeout: int
+) -> list[dict]:
     try:
-        resp = requests.get(f"{base_url}/v2/compute/docker/images", auth=auth, timeout=timeout)
+        resp = requests.get(
+            f"{base_url}/v2/compute/docker/images", auth=auth, timeout=timeout
+        )
         resp.raise_for_status()
         return resp.json()
     except requests.RequestException as e:
@@ -52,7 +55,9 @@ def live_extract_image_names(images_data: list[dict]) -> set[str]:
     return names
 
 
-def live_enrich_docker_status(templates: list[dict], available_images: set[str]) -> None:
+def live_enrich_docker_status(
+    templates: list[dict], available_images: set[str]
+) -> None:
     for template in templates:
         if template.get("template_type") == "docker":
             image_name = template.get("image")
@@ -64,9 +69,7 @@ def live_enrich_docker_status(templates: list[dict], available_images: set[str])
 # ---------- Cached data (written by the collector) ----------
 def load_data() -> dict:
     if not TEMPLATES_FILE.exists():
-        raise HTTPException(
-            500, f"gns3_templates.yml not found at {TEMPLATES_FILE}"
-        )
+        raise HTTPException(500, f"gns3_templates.yml not found at {TEMPLATES_FILE}")
     with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return data or {}
@@ -93,23 +96,24 @@ def flatten_templates(data: dict) -> list[dict]:
 
 def matches_filters(
     template: dict,
-    name: Optional[str],
-    template_type: Optional[str],
-    category: Optional[str],
-    builtin: Optional[bool],
-    server: Optional[str],
+    name: str | None,
+    template_type: str | None,
+    category: str | None,
+    builtin: bool | None,
+    server: str | None,
 ) -> bool:
     if name and name.lower() not in str(template.get("name", "")).lower():
         return False
-    if template_type and template.get("template_type", "").lower() != template_type.lower():
+    if (
+        template_type
+        and template.get("template_type", "").lower() != template_type.lower()
+    ):
         return False
     if category and template.get("category", "").lower() != category.lower():
         return False
     if builtin is not None and template.get("builtin") != builtin:
         return False
-    if server and template.get("_server_name", "").lower() != server.lower():
-        return False
-    return True
+    return not (server and template.get("_server_name", "").lower() != server.lower())
 
 
 # ---------- Routes ----------
@@ -117,8 +121,12 @@ def matches_filters(
 def get_live_templates(
     host: str = Query(..., description="IP or hostname of the GNS3 server"),
     port: int = Query(80, description="Port of the GNS3 server (default: 80)"),
-    username: Optional[str] = Query(None, description="Only needed if HTTP auth is enabled"),
-    password: Optional[str] = Query(None, description="Only needed if HTTP auth is enabled"),
+    username: str | None = Query(
+        None, description="Only needed if HTTP auth is enabled"
+    ),
+    password: str | None = Query(
+        None, description="Only needed if HTTP auth is enabled"
+    ),
     include_docker_status: bool = Query(
         True, description="Also check image availability for Docker templates"
     ),
@@ -138,9 +146,7 @@ def get_live_templates(
     try:
         templates = live_get_templates(base_url, auth, LIVE_REQUEST_TIMEOUT)
     except requests.RequestException as e:
-        raise HTTPException(
-            502, f"GNS3 server at {base_url} unreachable: {e}"
-        )
+        raise HTTPException(502, f"GNS3 server at {base_url} unreachable: {e}")
 
     docker_images: list[dict] = []
     if include_docker_status:
@@ -183,17 +189,17 @@ def health():
 
 @app.get("/api/templates")
 def get_templates(
-    name: Optional[str] = Query(None, description="Substring search on the name"),
-    template_type: Optional[str] = Query(
+    name: str | None = Query(None, description="Substring search on the name"),
+    template_type: str | None = Query(
         None, description="e.g. docker, qemu, dynamips, iou, vpcs, cloud"
     ),
-    category: Optional[str] = Query(
+    category: str | None = Query(
         None, description="e.g. router, switch, guest, firewall"
     ),
-    builtin: Optional[bool] = Query(
+    builtin: bool | None = Query(
         None, description="true = builtin only, false = custom templates only"
     ),
-    server: Optional[str] = Query(None, description="Name of the GNS3 server"),
+    server: str | None = Query(None, description="Name of the GNS3 server"),
 ):
     """
     Returns the list of all templates across every configured GNS3 server.
@@ -266,7 +272,9 @@ def get_template_types():
     the 'template_type' filter actually accepts)."""
     data = load_data()
     templates = flatten_templates(data)
-    types = sorted({t.get("template_type") for t in templates if t.get("template_type")})
+    types = sorted(
+        {t.get("template_type") for t in templates if t.get("template_type")}
+    )
     return {"template_types": types}
 
 

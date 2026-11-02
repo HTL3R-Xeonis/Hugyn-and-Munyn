@@ -39,7 +39,9 @@ PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
 STORE_DIR = os.environ.get("TEMPLATE_STORE_DIR", "")
 
 OUTPUT_FILE = Path(
-    os.environ.get("TEMPLATES_OUTPUT_FILE", "/home/junioradmin/yaml-api/data/templates.yml")
+    os.environ.get(
+        "TEMPLATES_OUTPUT_FILE", "/home/junioradmin/yaml-api/data/templates.yml"
+    )
 )
 LOG_FILE = Path(
     os.environ.get("TEMPLATES_LOG_FILE", "/home/junioradmin/yaml-api/logs/collect.log")
@@ -167,10 +169,14 @@ class DirectorySource:
 
     def find_yml_files(self) -> list[str]:
         found = []
-        for folder, _dirs, names in os.walk(self.root):  # symlinked folders are not followed
+        for folder, _dirs, names in os.walk(
+            self.root
+        ):  # symlinked folders are not followed
             for name in names:
                 if name.lower().endswith((".yml", ".yaml")):
-                    found.append((Path(folder) / name).relative_to(self.root).as_posix())
+                    found.append(
+                        (Path(folder) / name).relative_to(self.root).as_posix()
+                    )
         return sorted(found)
 
     def read(self, path: str) -> str:
@@ -281,7 +287,9 @@ def collect_templates(source, yml_files: list[str]) -> tuple[list[dict], dict]:
 
             # Remember the source YAML's folder, so the downloader later
             # knows which directory the associated .ova file lives in.
-            template["_source_dir"] = yml_path.rsplit("/", 1)[0] if "/" in yml_path else ""
+            template["_source_dir"] = (
+                yml_path.rsplit("/", 1)[0] if "/" in yml_path else ""
+            )
 
             seen_ids[template_id] = yml_path
             valid_templates.append(template)
@@ -299,7 +307,9 @@ def write_output(templates: list[dict]) -> None:
 
     tmp_path = OUTPUT_FILE.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
-        yaml.dump(output, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        yaml.dump(
+            output, f, allow_unicode=True, sort_keys=False, default_flow_style=False
+        )
     tmp_path.replace(OUTPUT_FILE)  # atomic swap, no half-written file on a crash
 
 

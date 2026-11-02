@@ -41,9 +41,7 @@ USERNAME = os.environ.get("FILEBROWSER_USER", "admin")
 PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
 
 TEMPLATES_FILE = Path(
-    os.environ.get(
-        "TEMPLATES_FILE", "/home/junioradmin/yaml-api/data/templates.yml"
-    )
+    os.environ.get("TEMPLATES_FILE", "/home/junioradmin/yaml-api/data/templates.yml")
 )
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", "/home/junioradmin/downloads"))
 
@@ -81,7 +79,9 @@ def load_templates() -> list[dict]:
 
 def name_similarity(query: str, candidate: str) -> float:
     """Similarity between 0 and 1 via SequenceMatcher, case-insensitive."""
-    return SequenceMatcher(None, query.lower().strip(), candidate.lower().strip()).ratio()
+    return SequenceMatcher(
+        None, query.lower().strip(), candidate.lower().strip()
+    ).ratio()
 
 
 def tag_similarity(query_tags: list[str], candidate_tags: list[str]) -> float:
@@ -97,13 +97,19 @@ def tag_similarity(query_tags: list[str], candidate_tags: list[str]) -> float:
     return len(intersection) / len(union) if union else 0.0
 
 
-def score_template(template: dict, name_query: str | None, tags_query: list[str]) -> float:
+def score_template(
+    template: dict, name_query: str | None, tags_query: list[str]
+) -> float:
     """Computes a combined 0..1 score for a template."""
     has_name = bool(name_query)
     has_tags = bool(tags_query)
 
-    name_score = name_similarity(name_query, template.get("name", "")) if has_name else 0.0
-    tags_score = tag_similarity(tags_query, template.get("tags", [])) if has_tags else 0.0
+    name_score = (
+        name_similarity(name_query, template.get("name", "")) if has_name else 0.0
+    )
+    tags_score = (
+        tag_similarity(tags_query, template.get("tags", [])) if has_tags else 0.0
+    )
 
     if has_name and has_tags:
         return NAME_WEIGHT * name_score + TAGS_WEIGHT * tags_score
@@ -213,9 +219,7 @@ def parse_args() -> argparse.Namespace:
         description="Searches and downloads templates by name/tags via fuzzy matching."
     )
     parser.add_argument("--name", help="Name to search for (e.g. 'mint' or 'mint21')")
-    parser.add_argument(
-        "--tags", help="Comma-separated tags (e.g. 'linux,gui,host')"
-    )
+    parser.add_argument("--tags", help="Comma-separated tags (e.g. 'linux,gui,host')")
     parser.add_argument(
         "--top", type=int, default=5, help="Number of top matches to show (default: 5)"
     )
