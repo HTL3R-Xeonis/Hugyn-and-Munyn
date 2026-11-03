@@ -21,8 +21,9 @@ scrape_configs:
         - '10.20.20.182:9100'
 
   # Devices that cannot run a node exporter are checked from the outside by the blackbox exporter.
-  # Not here on purpose: the ESXi hosts (the vmware_vcenter and vmware_esxi8 jobs below cover them) and everything of the
-  # lab - the GNS3 VM, the lab VMs - because their addresses change.
+  # Not here on purpose: the ESXi hosts, vCenter and TrueNAS (the vmware_vcenter, vmware_esxi8 and truenas jobs below
+  # cover them), the LLM server (its node exporter covers it) and everything of the lab - the GNS3 VM, the lab VMs - because
+  # their addresses change.
   # To monitor another one, add a target to the matching job (or a new job) and reload Prometheus:
   #   docker kill -s HUP prometheus
   # Query: probe_success{job=~"probe_.*"} (1 = reachable), probe_duration_seconds, probe_http_status_code.
@@ -34,39 +35,6 @@ scrape_configs:
       - targets: ['10.20.20.90']
         labels:
           name: 'EMC Unisphere storage'
-          role: 'storage'
-      - targets: ['10.20.20.211']
-        labels:
-          name: 'vCenter'
-          role: 'hypervisor'
-      - targets: ['10.20.20.180']
-        labels:
-          name: 'TrueNAS'
-          role: 'storage'
-      - targets: ['10.20.20.182']
-        labels:
-          name: 'LLM backup server'
-          role: 'llm'
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: blackbox-exporter:9115
-
-  - job_name: 'probe_https'
-    metrics_path: /probe
-    params:
-      module: [https_insecure]
-    static_configs:
-      - targets: ['https://10.20.20.211/']
-        labels:
-          name: 'vCenter'
-          role: 'hypervisor'
-      - targets: ['https://10.20.20.180/']
-        labels:
-          name: 'TrueNAS'
           role: 'storage'
     relabel_configs:
       - source_labels: [__address__]
@@ -86,23 +54,6 @@ scrape_configs:
         labels:
           name: 'EMC Unisphere storage'
           role: 'storage'
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: blackbox-exporter:9115
-
-  - job_name: 'probe_tcp'
-    metrics_path: /probe
-    params:
-      module: [tcp_connect]
-    static_configs:
-      - targets: ['10.20.20.182:22']
-        labels:
-          name: 'LLM backup server SSH'
-          role: 'llm'
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

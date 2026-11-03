@@ -25,7 +25,7 @@
   ],
   "title": "Geräte ohne Node-Exporter (Blackbox)",
   "uid": "blackbox-geraete",
-  "description": "Erreichbarkeit der Geräte, auf denen kein node_exporter läuft (Speichersysteme, vCenter, TrueNAS, LLM-Backup; die ESXi-Hosts deckt der VMware-Exporter ab, Lab-VMs werden nicht überwacht, weil sich ihre Adresse ändert), geprüft von außen per Blackbox-Exporter.",
+  "description": "Erreichbarkeit der Geräte, auf denen kein node_exporter läuft (Speichersysteme; vCenter, TrueNAS und die ESXi-Hosts decken ihre eigenen Exporter ab, der LLM-Server den Node-Exporter, Lab-VMs werden nicht überwacht, weil sich ihre Adresse ändert), geprüft von außen per Blackbox-Exporter.",
   "tags": [
     "blackbox",
     "geraete",
@@ -98,7 +98,7 @@
     },
     {
       "id": 2,
-      "title": "Dienste erreichbar (HTTP, HTTPS, TCP)",
+      "title": "Dienste erreichbar (HTTP)",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -116,7 +116,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(probe_success{job=~\"probe_http|probe_https|probe_tcp\"})",
+          "expr": "sum(probe_success{job=~\"probe_http\"})",
           "legendFormat": "",
           "refId": "A",
           "instant": true
@@ -517,7 +517,7 @@
     },
     {
       "id": 9,
-      "title": "Antwortzeit der Webseiten (HTTP und HTTPS)",
+      "title": "Antwortzeit der Webseiten (HTTP)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -535,7 +535,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "probe_duration_seconds{job=~\"probe_http|probe_https\"}",
+          "expr": "probe_duration_seconds{job=~\"probe_http\"}",
           "legendFormat": "{{name}} ({{job}})",
           "refId": "A"
         }
@@ -572,7 +572,7 @@
       "gridPos": {
         "x": 0,
         "y": 21,
-        "w": 12,
+        "w": 24,
         "h": 6
       },
       "targets": [
@@ -581,7 +581,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "probe_http_status_code{job=~\"probe_http|probe_https\"}",
+          "expr": "probe_http_status_code{job=~\"probe_http\"}",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -620,71 +620,6 @@
           }
         }
       ]
-    },
-    {
-      "id": 11,
-      "title": "Zertifikat läuft ab in (Tagen)",
-      "type": "table",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 21,
-        "w": 12,
-        "h": 6
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "(probe_ssl_earliest_cert_expiry{job=\"probe_https\"} - time()) / 86400",
-          "legendFormat": "",
-          "refId": "A",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "d",
-          "decimals": 0
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Tage"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "role": true,
-              "job": true
-            }
-          }
-        }
-      ],
-      "description": "Nur für Geräte mit HTTPS (selbstsignierte Zertifikate sind erlaubt, die Prüfung ignoriert die Vertrauenskette)"
     }
   ],
   "templating": {
