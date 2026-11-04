@@ -78,7 +78,7 @@
               },
               {
                 "color": "green",
-                "value": 7
+                "value": 1
               }
             ]
           }
@@ -94,7 +94,7 @@
         "colorMode": "background",
         "graphMode": "none"
       },
-      "description": "Anzahl der Geräte, die auf Ping antworten (von 7 überwachten)"
+      "description": "Anzahl der Geräte, die auf Ping antworten"
     },
     {
       "id": 2,
@@ -134,7 +134,7 @@
               },
               {
                 "color": "green",
-                "value": 7
+                "value": 1
               }
             ]
           }
