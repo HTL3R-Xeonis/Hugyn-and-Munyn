@@ -18,6 +18,8 @@ app = FastAPI(title="GNS3 Template API", version="1.1")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 TEMPLATES_FILE = DATA_DIR / "gns3_templates.yml"
+# A file in this folder asks the host to run the collector now (see gns3-reader/gns3-collector.path)
+TRIGGER_DIR = Path(os.environ.get("TRIGGER_DIR", "/trigger"))
 LIVE_REQUEST_TIMEOUT = 15
 
 
@@ -185,6 +187,19 @@ def health():
         "servers": len(data.get("servers", [])),
         "problems": [],
     }
+
+
+@app.post("/api/refresh", status_code=202)
+def request_refresh():
+    """Asks for the collector to run now instead of at its next timer run, e.g. right after a GNS3 VM was started.
+    Only drops a request file; the host's path unit starts the collector."""
+    if not TRIGGER_DIR.is_dir():
+        raise HTTPException(501, "refresh requests are not set up on this host")
+    try:
+        (TRIGGER_DIR / "refresh").touch()
+    except OSError as exc:
+        raise HTTPException(501, f"refresh request could not be written: {exc}")
+    return {"requested": True}
 
 
 @app.get("/api/templates")

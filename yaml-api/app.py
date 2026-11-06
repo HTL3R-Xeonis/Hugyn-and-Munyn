@@ -20,6 +20,8 @@ app = FastAPI(title="Template API", version="2.0")
 # ---------- Configuration ----------
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 TEMPLATES_FILE = DATA_DIR / "templates.yml"
+# A file in this folder asks the host to run the collector now (see yaml-collector.path)
+TRIGGER_DIR = Path(os.environ.get("TRIGGER_DIR", "/trigger"))
 
 # When set, downloads are served straight from this directory (the share mounted on this machine) instead of being
 # proxied through Filebrowser. Unset keeps the Filebrowser behaviour.
@@ -187,6 +189,19 @@ def health():
         "problems": problems,
     }
     return JSONResponse(body, status_code=503 if problems else 200)
+
+
+@app.post("/api/refresh", status_code=202)
+def request_refresh():
+    """Asks for the collector to run now instead of at its next timer run. Only drops a request file; the host's path
+    unit starts the collector."""
+    if not TRIGGER_DIR.is_dir():
+        raise HTTPException(501, "refresh requests are not set up on this host")
+    try:
+        (TRIGGER_DIR / "refresh").touch()
+    except OSError as exc:
+        raise HTTPException(501, f"refresh request could not be written: {exc}")
+    return {"requested": True}
 
 
 @app.get("/api/templates")

@@ -321,3 +321,63 @@ def test_the_gns3_api_health_is_503_without_the_collected_file(monkeypatch, tmp_
     response = client.get("/health")
     assert response.status_code == 503
     assert response.json()["status"] == "degraded"
+
+
+def test_the_gns3_api_refresh_request_drops_the_trigger_file(monkeypatch, tmp_path):
+    trigger = tmp_path / "trigger"
+    trigger.mkdir()
+    client = TestClient(
+        _load(
+            "gns3-template-api/gns3_api_app.py",
+            monkeypatch,
+            DATA_DIR=str(tmp_path),
+            TRIGGER_DIR=str(trigger),
+        ).app
+    )
+    response = client.post("/api/refresh")
+    assert response.status_code == 202
+    assert response.json() == {"requested": True}
+    assert (trigger / "refresh").exists()
+
+
+def test_the_gns3_api_refresh_request_says_so_when_it_is_not_set_up(
+    monkeypatch, tmp_path
+):
+    client = TestClient(
+        _load(
+            "gns3-template-api/gns3_api_app.py",
+            monkeypatch,
+            DATA_DIR=str(tmp_path),
+            TRIGGER_DIR=str(tmp_path / "missing"),
+        ).app
+    )
+    assert client.post("/api/refresh").status_code == 501
+
+
+def test_the_template_api_refresh_request_drops_the_trigger_file(monkeypatch, tmp_path):
+    trigger = tmp_path / "trigger"
+    trigger.mkdir()
+    client = TestClient(
+        _load(
+            "yaml-api/app.py",
+            monkeypatch,
+            DATA_DIR=str(tmp_path),
+            TRIGGER_DIR=str(trigger),
+        ).app
+    )
+    response = client.post("/api/refresh")
+    assert response.status_code == 202
+    assert (trigger / "refresh").exists()
+    assert (
+        TestClient(
+            _load(
+                "yaml-api/app.py",
+                monkeypatch,
+                DATA_DIR=str(tmp_path),
+                TRIGGER_DIR=str(tmp_path / "missing"),
+            ).app
+        )
+        .post("/api/refresh")
+        .status_code
+        == 501
+    )

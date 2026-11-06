@@ -8,6 +8,8 @@ services:
     volumes:
       # Read-only: the API only needs templates.yml, not the whole NFS share
       - /home/junioradmin/yaml-api/data:/data:ro
+      # Read-write, but only for the request file that makes the host run the collector now (POST /api/refresh)
+      - /home/junioradmin/yaml-api/trigger:/trigger
     environment:
       - FILEBROWSER_URL=http://10.20.20.171:4000
       - FILEBROWSER_USER=admin

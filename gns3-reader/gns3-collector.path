@@ -1,0 +1,9 @@
+[Unit]
+Description=Runs the GNS3 collector when the template API got a refresh request (POST /api/refresh)
+
+[Path]
+PathExists=/home/junioradmin/gns3-reader/trigger/refresh
+Unit=gns3-collector.service
+
+[Install]
+WantedBy=multi-user.target

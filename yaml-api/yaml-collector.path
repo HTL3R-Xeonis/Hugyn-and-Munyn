@@ -1,0 +1,9 @@
+[Unit]
+Description=Runs the template collector when the template API got a refresh request (POST /api/refresh)
+
+[Path]
+PathExists=/home/junioradmin/yaml-api/trigger/refresh
+Unit=yaml-collector.service
+
+[Install]
+WantedBy=multi-user.target

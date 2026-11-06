@@ -10,3 +10,5 @@ services:
     volumes:
       # Read-only: the API only needs the file the collector produces
       - /home/junioradmin/gns3-reader/data:/data:ro
+      # Read-write, but only for the request file that makes the host run the collector now (POST /api/refresh)
+      - /home/junioradmin/gns3-reader/trigger:/trigger
