@@ -14,5 +14,7 @@ EnvironmentFile=-/home/junioradmin/gns3-reader/.env
 ExecStartPre=-/bin/rm -f /home/junioradmin/gns3-reader/trigger/refresh
 ExecStart=/home/junioradmin/gns3-reader/venv/bin/python /home/junioradmin/gns3-reader/read_gns3_templates.py --config /home/junioradmin/gns3-reader/gns3_config.yml
 
+# A run that hangs (an unreachable host that never answers) is killed, so the timer can start the next one
+TimeoutStartSec=120
 NoNewPrivileges=true
 ProtectSystem=false

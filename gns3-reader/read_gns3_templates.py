@@ -36,6 +36,7 @@ import json
 import logging
 import os
 import re
+import socket
 import ssl
 import sys
 from logging.handlers import RotatingFileHandler
@@ -48,6 +49,7 @@ from pyVmomi import vim
 
 DEFAULT_CONFIG_PATH = "gns3_config.yml"
 DEFAULT_TIMEOUT = 15
+ESXI_SOCKET_TIMEOUT_SECONDS = 60
 ESXI_PORT = 443
 
 # Matches the backup-name suffix a topologybuilder '--fresh-gns3-vm' run
@@ -450,6 +452,9 @@ def main() -> int:
 
     log = setup_logging(config.get("log_file"))
     timeout = config.get("request_timeout", DEFAULT_TIMEOUT)
+    # pyVmomi has no timeout of its own: an ESXi host that accepts the connection and then stops answering
+    # (it does when it is going down) would block this run forever, and the timer never starts a second one.
+    socket.setdefaulttimeout(max(timeout, ESXI_SOCKET_TIMEOUT_SECONDS))
 
     if args.profiles_dir:
         if Path(args.profiles_dir).is_dir():

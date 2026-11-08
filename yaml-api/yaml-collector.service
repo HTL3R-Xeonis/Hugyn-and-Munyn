@@ -15,3 +15,6 @@ EnvironmentFile=/home/junioradmin/yaml-api/.env
 # A request file (see yaml-collector.path) is consumed before the run, so a request during a run starts another one
 ExecStartPre=-/bin/rm -f /home/junioradmin/yaml-api/trigger/refresh
 ExecStart=/home/junioradmin/yaml-api/venv/bin/python /home/junioradmin/yaml-api/collect_templates.py
+
+# A run that hangs (an unreachable host that never answers) is killed, so the timer can start the next one
+TimeoutStartSec=120
