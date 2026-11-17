@@ -577,6 +577,18 @@ def main() -> int:
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Nothing could be read (the Operator or every ESXi host was unreachable for a moment): an empty list must not
+    # replace the last good one - the template API would serve nothing until the next successful run.
+    nothing_read = bool(all_results) and not any(
+        r["status"] == "ok" for r in all_results
+    )
+    if nothing_read and output_path.exists():
+        log.error(
+            "No server could be read - keeping the previous %s instead of writing an empty list.",
+            output_path,
+        )
+        return 1
+
     tmp_path = output_path.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         yaml.dump(

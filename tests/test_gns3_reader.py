@@ -416,3 +416,47 @@ def test_a_missing_profiles_folder_means_no_hosts_not_a_failed_run(
     assert code == 0
     assert calls == []
     assert yaml.safe_load(output.read_text()) == {"version": 1, "servers": []}
+
+
+def test_a_run_that_reads_no_server_keeps_the_last_good_output(
+    reader, monkeypatch, tmp_path
+):
+    servers = [{"name": "a", "esxi_host": "10.0.0.1"}]
+    code, _, output = _run(reader, monkeypatch, tmp_path, servers=servers)
+    assert code == 0
+    good = output.read_text()
+
+    def unreachable(server_cfg, timeout, log, esxi_password):
+        return {
+            "name": server_cfg["name"],
+            "esxi_host": server_cfg["esxi_host"],
+            "status": "unreachable",
+            "templates": [],
+        }
+
+    code, _, output = _run(
+        reader, monkeypatch, tmp_path, servers=servers, read_server=unreachable
+    )
+    assert code == 1
+    assert output.read_text() == good
+
+
+def test_a_first_run_that_reads_no_server_still_writes_the_file(
+    reader, monkeypatch, tmp_path
+):
+    def unreachable(server_cfg, timeout, log, esxi_password):
+        return {
+            "name": server_cfg["name"],
+            "esxi_host": server_cfg["esxi_host"],
+            "status": "unreachable",
+            "templates": [],
+        }
+
+    code, _, output = _run(
+        reader,
+        monkeypatch,
+        tmp_path,
+        servers=[{"name": "a", "esxi_host": "10.0.0.1"}],
+        read_server=unreachable,
+    )
+    assert code == 0 and output.exists()
