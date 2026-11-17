@@ -12,9 +12,8 @@
 # rule above, which would otherwise make auto-detection ambiguous - an
 # explicit name is used as-is, without the guest-OS check.
 #
-# The ESXi password is NOT entered here, but provided via the ESXI_PASSWORD
-# environment variable (see .env.example) - applies equally to every ESXi
-# host listed below.
+# The ESXi password is normally NOT entered here: for a host without an 'esxi_password' of its own the collector asks the
+# Operator (OPERATOR_URL + OPERATOR_TOKEN, see .env.example). There is no process-wide ESXi password any more.
 #
 # 'username'/'password' (without the esxi_ prefix) are something different:
 # these are optional and only needed if "Enable HTTP authentication" is
@@ -23,7 +22,7 @@
 # Instead of listing the hosts here, the collector can take them from the host profiles of TopologyOperator/Ginnungagap:
 #   read_gns3_templates.py --config gns3_config.yml --profiles-dir <its settings_profiles folder>
 # (or set HOST_PROFILES_DIR). Then 'servers' below is not used; each profile with an esxi.ip becomes a server named after
-# the profile, with the ESXi password the app stored for that host (else ESXI_PASSWORD). output_file, log_file and
+# the profile, with the ESXi password the app stored for that host (else the Operator is asked). output_file, log_file and
 # request_timeout are still read from here.
 
 servers:

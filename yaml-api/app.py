@@ -27,9 +27,14 @@ TRIGGER_DIR = Path(os.environ.get("TRIGGER_DIR", "/trigger"))
 # proxied through Filebrowser. Unset keeps the Filebrowser behaviour.
 STORE_DIR = os.environ.get("TEMPLATE_STORE_DIR", "")
 
-FILEBROWSER_URL = os.environ.get("FILEBROWSER_URL", "http://10.20.20.171:4000")
-FILEBROWSER_USER = os.environ.get("FILEBROWSER_USER", "admin")
+# No defaults: without a template directory the Filebrowser must be configured completely (see no_source_problem).
+FILEBROWSER_URL = os.environ.get("FILEBROWSER_URL", "")
+FILEBROWSER_USER = os.environ.get("FILEBROWSER_USER", "")
 FILEBROWSER_PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
+NO_SOURCE_PROBLEM = (
+    "Neither TEMPLATE_STORE_DIR nor FILEBROWSER_URL + FILEBROWSER_PASSWORD is set - the template list cannot be read. "
+    "Set TEMPLATE_STORE_DIR (preferred) or the Filebrowser variables."
+)
 
 NAME_WEIGHT = 0.6
 TAGS_WEIGHT = 0.4
@@ -96,6 +101,17 @@ def rank_templates(
 
 
 # ---------- Helpers: Filebrowser proxy ----------
+def no_source_problem() -> str | None:
+    """Set when files can neither be read from a directory nor through a completely configured Filebrowser."""
+    if STORE_DIR:
+        return None
+    if not FILEBROWSER_URL or not FILEBROWSER_PASSWORD:
+        return NO_SOURCE_PROBLEM
+    if not FILEBROWSER_USER:
+        return "FILEBROWSER_USER is not set - the Filebrowser login needs a user name."
+    return None
+
+
 def filebrowser_login() -> str:
     resp = requests.post(
         f"{FILEBROWSER_URL}/api/login",
@@ -146,8 +162,10 @@ def local_download(template: dict) -> FileResponse:
 def proxy_download(template: dict) -> StreamingResponse:
     if STORE_DIR:
         return local_download(template)
-    if not FILEBROWSER_PASSWORD:
-        raise HTTPException(500, "FILEBROWSER_PASSWORD is not set on the API server.")
+    problem = no_source_problem()
+    if problem:
+        log.error(problem)
+        raise HTTPException(500, problem)
 
     remote_path = build_remote_path(template)
     file_name = template["file"]
@@ -182,6 +200,9 @@ def health():
         problems.append(str(exc.detail))
     if STORE_DIR and not Path(STORE_DIR).is_dir():
         problems.append(f"the template directory {STORE_DIR} is not there")
+    source_problem = no_source_problem()
+    if source_problem:
+        problems.append(source_problem)
     body = {
         "status": "ok" if not problems else "degraded",
         "templates": count,

@@ -28,8 +28,9 @@ import requests
 import yaml
 
 # ---------- Configuration ----------
-FILEBROWSER_URL = os.environ.get("FILEBROWSER_URL", "http://10.20.20.171:4000")
-USERNAME = os.environ.get("FILEBROWSER_USER", "admin")
+# No defaults for any of these: a collector without a complete configuration refuses to run (see configuration_problem).
+FILEBROWSER_URL = os.environ.get("FILEBROWSER_URL", "")
+USERNAME = os.environ.get("FILEBROWSER_USER", "")
 # Set the password via an environment variable, not hardcoded in the script:
 #   export FILEBROWSER_PASSWORD='YourPassword!123'
 PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
@@ -38,13 +39,16 @@ PASSWORD = os.environ.get("FILEBROWSER_PASSWORD", "")
 # TEMPLATE_STORE_DIR is set - no Filebrowser needed then - otherwise through Filebrowser as before.
 STORE_DIR = os.environ.get("TEMPLATE_STORE_DIR", "")
 
-OUTPUT_FILE = Path(
-    os.environ.get(
-        "TEMPLATES_OUTPUT_FILE", "/home/junioradmin/yaml-api/data/templates.yml"
-    )
+# Where the result and the log go: required, never a default folder of some user (see configuration_problem).
+OUTPUT_FILE = (
+    Path(os.environ["TEMPLATES_OUTPUT_FILE"])
+    if os.environ.get("TEMPLATES_OUTPUT_FILE")
+    else None
 )
-LOG_FILE = Path(
-    os.environ.get("TEMPLATES_LOG_FILE", "/home/junioradmin/yaml-api/logs/collect.log")
+LOG_FILE = (
+    Path(os.environ["TEMPLATES_LOG_FILE"])
+    if os.environ.get("TEMPLATES_LOG_FILE")
+    else None
 )
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
@@ -313,7 +317,33 @@ def write_output(templates: list[dict]) -> None:
     tmp_path.replace(OUTPUT_FILE)  # atomic swap, no half-written file on a crash
 
 
+NO_SOURCE_PROBLEM = (
+    "Neither TEMPLATE_STORE_DIR nor FILEBROWSER_URL + FILEBROWSER_PASSWORD is set - the template list cannot be read. "
+    "Set TEMPLATE_STORE_DIR (preferred) or the Filebrowser variables."
+)
+
+
+def configuration_problem() -> str | None:
+    """The first thing that is missing from the configuration, as a sentence to show - never containing a secret."""
+    if OUTPUT_FILE is None:
+        return "TEMPLATES_OUTPUT_FILE is not set - refusing to write into a default home folder."
+    if LOG_FILE is None:
+        return "TEMPLATES_LOG_FILE is not set - refusing to write into a default home folder."
+    if not STORE_DIR:
+        if not FILEBROWSER_URL or not PASSWORD:
+            return NO_SOURCE_PROBLEM
+        if not USERNAME:
+            return (
+                "FILEBROWSER_USER is not set - the Filebrowser login needs a user name."
+            )
+    return None
+
+
 def main() -> int:
+    problem = configuration_problem()
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
     setup_logging()
     log.info("=" * 60)
     log.info("Starting template collection")
@@ -325,13 +355,6 @@ def main() -> int:
         log.info("Reading the templates from the directory %s", STORE_DIR)
         source = DirectorySource(STORE_DIR)
     else:
-        if not PASSWORD:
-            log.error(
-                "FILEBROWSER_PASSWORD is not set. Aborting. "
-                "Please set it via an environment variable."
-            )
-            return 1
-
         try:
             source = FilebrowserSource()
         except requests.RequestException:

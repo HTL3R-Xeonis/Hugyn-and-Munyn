@@ -21,6 +21,8 @@ def _load(relative: str, monkeypatch, **env: str):
     for key in (
         "TEMPLATE_STORE_DIR",
         "DATA_DIR",
+        "FILEBROWSER_URL",
+        "FILEBROWSER_USER",
         "FILEBROWSER_PASSWORD",
         "TEMPLATES_OUTPUT_FILE",
         "TEMPLATES_LOG_FILE",
@@ -153,15 +155,87 @@ def test_main_stops_when_the_template_directory_is_missing(monkeypatch, tmp_path
     assert not (tmp_path / "templates.yml").exists()
 
 
-def test_without_a_directory_the_collector_still_needs_the_filebrowser_password(
-    monkeypatch, tmp_path
+NO_SOURCE = (
+    "Neither TEMPLATE_STORE_DIR nor FILEBROWSER_URL + FILEBROWSER_PASSWORD is set - the template list cannot be read. "
+    "Set TEMPLATE_STORE_DIR (preferred) or the Filebrowser variables."
+)
+
+
+def _configured(tmp_path, **env):
+    return {
+        "TEMPLATES_OUTPUT_FILE": str(tmp_path / "templates.yml"),
+        "TEMPLATES_LOG_FILE": str(tmp_path / "collect.log"),
+        **env,
+    }
+
+
+def test_without_any_source_the_collector_refuses_to_run(monkeypatch, tmp_path, capsys):
+    collector = _collector(monkeypatch, **_configured(tmp_path))
+    assert collector.main() == 1
+    assert capsys.readouterr().err.strip() == NO_SOURCE
+    assert not (tmp_path / "templates.yml").exists()
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"FILEBROWSER_URL": "http://fb.test", "FILEBROWSER_USER": "u"},  # no password
+        {"FILEBROWSER_PASSWORD": "pw", "FILEBROWSER_USER": "u"},  # no url
+    ],
+)
+def test_an_incomplete_filebrowser_configuration_is_refused_with_the_same_text(
+    monkeypatch, tmp_path, capsys, env
+):
+    collector = _collector(monkeypatch, **_configured(tmp_path, **env))
+    assert collector.main() == 1
+    assert capsys.readouterr().err.strip() == NO_SOURCE
+
+
+def test_a_filebrowser_configuration_without_a_user_is_refused(
+    monkeypatch, tmp_path, capsys
 ):
     collector = _collector(
-        monkeypatch, TEMPLATES_LOG_FILE=str(tmp_path / "collect.log")
+        monkeypatch,
+        **_configured(
+            tmp_path, FILEBROWSER_URL="http://fb.test", FILEBROWSER_PASSWORD="s3cret"
+        ),
     )
+    assert collector.main() == 1
+    err = capsys.readouterr().err
     assert (
-        collector.main() == 1
-    )  # unchanged behaviour: aborts before any network access
+        err.strip()
+        == "FILEBROWSER_USER is not set - the Filebrowser login needs a user name."
+    )
+    assert "s3cret" not in err
+
+
+def test_the_collector_needs_an_output_file_and_a_log_file(
+    monkeypatch, store, tmp_path, capsys
+):
+    collector = _collector(monkeypatch, TEMPLATE_STORE_DIR=str(store))
+    assert collector.main() == 1
+    assert (
+        capsys.readouterr().err.strip()
+        == "TEMPLATES_OUTPUT_FILE is not set - refusing to write into a default home folder."
+    )
+    collector = _collector(
+        monkeypatch,
+        TEMPLATE_STORE_DIR=str(store),
+        TEMPLATES_OUTPUT_FILE=str(tmp_path / "templates.yml"),
+    )
+    assert collector.main() == 1
+    assert (
+        capsys.readouterr().err.strip()
+        == "TEMPLATES_LOG_FILE is not set - refusing to write into a default home folder."
+    )
+    assert not (tmp_path / "templates.yml").exists()
+
+
+def test_no_default_points_at_a_lab_host_or_a_home_folder(monkeypatch):
+    collector = _collector(monkeypatch)
+    assert collector.FILEBROWSER_URL == "" and collector.USERNAME == ""
+    assert collector.PASSWORD == ""
+    assert collector.OUTPUT_FILE is None and collector.LOG_FILE is None
 
 
 def test_the_filebrowser_source_is_unchanged(monkeypatch):
@@ -218,8 +292,40 @@ def test_health_is_ok_with_the_templates_and_names_how_downloads_work(
 
 
 def test_health_in_filebrowser_mode(monkeypatch, tmp_path):
-    body = _api(monkeypatch, tmp_path).get("/health").json()
+    body = (
+        _api(
+            monkeypatch,
+            tmp_path,
+            FILEBROWSER_URL="http://fb.test",
+            FILEBROWSER_USER="u",
+            FILEBROWSER_PASSWORD="pw",
+        )
+        .get("/health")
+        .json()
+    )
     assert body["status"] == "ok" and body["download"] == "filebrowser"
+
+
+def test_health_is_503_without_a_directory_and_without_a_complete_filebrowser(
+    monkeypatch, tmp_path
+):
+    response = _api(monkeypatch, tmp_path, FILEBROWSER_PASSWORD="s3cret").get("/health")
+    assert response.status_code == 503
+    assert response.json()["problems"] == [NO_SOURCE]
+    assert "s3cret" not in response.text
+
+
+def test_health_names_a_missing_filebrowser_user(monkeypatch, tmp_path):
+    response = _api(
+        monkeypatch,
+        tmp_path,
+        FILEBROWSER_URL="http://fb.test",
+        FILEBROWSER_PASSWORD="pw",
+    ).get("/health")
+    assert response.status_code == 503
+    assert response.json()["problems"] == [
+        "FILEBROWSER_USER is not set - the Filebrowser login needs a user name."
+    ]
 
 
 def test_health_is_503_when_the_templates_file_is_missing(monkeypatch, tmp_path, store):
@@ -275,12 +381,12 @@ def test_a_template_pointing_outside_of_the_directory_is_refused(
     assert b"SECRET" not in response.content
 
 
-def test_without_a_directory_downloads_still_need_the_filebrowser_password(
+def test_without_a_directory_downloads_need_a_complete_filebrowser_configuration(
     monkeypatch, tmp_path
 ):
     response = _api(monkeypatch, tmp_path).get("/api/download/deb12")
     assert response.status_code == 500
-    assert "FILEBROWSER_PASSWORD" in response.json()["detail"]
+    assert response.json()["detail"] == NO_SOURCE
 
 
 # ---------- the GNS3 template API ----------

@@ -11,13 +11,17 @@ its current IP is used, instead of
 relying on a hardcoded, potentially stale IP (GNS3 VMs often get their IP
 via DHCP, and a topologybuilder '--fresh-gns3-vm' run replaces the VM
 entirely - both make a static IP unreliable). Because of this it also needs
-pyvmomi in addition to requests/pyyaml, and an ESXi password via the
-ESXI_PASSWORD environment variable (see .env.example).
+pyvmomi in addition to requests/pyyaml, and an ESXi login for every host.
+
+The login of a host comes from, in this order: its own 'esxi_password' in the config (or the one the app stored for its
+profile, see --profiles-dir), otherwise the Operator is asked for it (OPERATOR_URL + OPERATOR_TOKEN, see .env.example):
+GET <OPERATOR_URL>/internal/host-credentials?ip=<esxi ip> with a bearer token. There is no process-wide password any more -
+a host without a login is reported and skipped, the others still run.
 
 With --profiles-dir the list of servers is not taken from the config file but from the host profiles of
 TopologyOperator/Ginnungagap (its settings_profiles folder): one server per profile with an esxi.ip, so a host is
 entered in one place only. The ESXi password of such a host is the one stored for it by the app
-(<profiles-dir>/.secrets/<profile>.json, key esxi_password), otherwise ESXI_PASSWORD as before. The config file is still
+(<profiles-dir>/.secrets/<profile>.json, key esxi_password), otherwise the Operator is asked. The config file is still
 read for output_file, log_file and request_timeout.
 
 Usage:
@@ -116,6 +120,53 @@ def _stored_esxi_password(profiles_dir: Path, profile_name: str) -> str | None:
         return None
     password = data.get("esxi_password") if isinstance(data, dict) else None
     return password if isinstance(password, str) and password else None
+
+
+class OperatorLoginError(Exception):
+    """The Operator could not give a host's login; the message is ready to log (never contains a secret)."""
+
+
+def fetch_operator_login(
+    operator_url: str, token: str, name: str, ip: str, timeout: float
+) -> tuple[str, str]:
+    """(username, password) of the ESXi host with this address, asked from the Operator's gateway."""
+    url = operator_url.rstrip("/") + "/internal/host-credentials"
+    try:
+        response = requests.get(
+            url,
+            params={"ip": ip},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        raise OperatorLoginError(
+            f"Server {name}: the Operator at {operator_url} could not be reached "
+            f"({type(exc).__name__}) - no ESXi login."
+        ) from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if response.status_code != 200:
+        detail = body.get("detail") if isinstance(body, dict) else None
+        raise OperatorLoginError(
+            f"Server {name}: the Operator answered HTTP {response.status_code} for {ip} "
+            f"({detail or response.reason or 'no detail'}) - add the host in the Operator."
+        )
+    username = body.get("username") if isinstance(body, dict) else None
+    password = body.get("password") if isinstance(body, dict) else None
+    if not isinstance(username, str) or not isinstance(password, str) or not password:
+        raise OperatorLoginError(
+            f"Server {name}: the Operator answered HTTP 200 for {ip} without a user name and password - "
+            f"add the host in the Operator."
+        )
+    return username, password
+
+
+NO_LOGIN_TEXT = (
+    "Server {name}: no ESXi login - set esxi_password in the config or "
+    "OPERATOR_URL + OPERATOR_TOKEN so the Operator can be asked."
+)
 
 
 def servers_from_profiles(profiles_dir: str, log: logging.Logger) -> list[dict]:
@@ -473,13 +524,8 @@ def main() -> int:
             args.profiles_dir,
         )
 
-    esxi_password = os.getenv("ESXI_PASSWORD")
-    if not args.profiles_dir and not esxi_password:
-        log.error(
-            "ESXI_PASSWORD environment variable not set - cannot establish "
-            "an ESXi connection. See .env.example."
-        )
-        return 1
+    operator_url = os.getenv("OPERATOR_URL", "").strip()
+    operator_token = os.getenv("OPERATOR_TOKEN", "").strip()
 
     log.info("=" * 60)
     log.info(
@@ -488,21 +534,34 @@ def main() -> int:
 
     all_results = []
     for server_cfg in config["servers"]:
-        password = server_cfg.get("esxi_password") or esxi_password
+        name = server_cfg.get("name", server_cfg["esxi_host"])
+        password = server_cfg.get("esxi_password")
+        problem = None
         if not password:
-            # Only possible with profiles: this host has no stored password and ESXI_PASSWORD is not set either.
+            if operator_url and operator_token:
+                try:
+                    username, password = fetch_operator_login(
+                        operator_url,
+                        operator_token,
+                        name,
+                        server_cfg["esxi_host"],
+                        timeout,
+                    )
+                    server_cfg = {**server_cfg, "esxi_username": username}
+                except OperatorLoginError as exc:
+                    problem = str(exc)
+            else:
+                problem = NO_LOGIN_TEXT.format(name=name)
+        if problem:
             # Not worth aborting the other hosts for.
-            log.error(
-                "Server '%s': no ESXi password stored and ESXI_PASSWORD not set - skipped.",
-                server_cfg["name"],
-            )
+            log.error(problem)
             all_results.append(
                 {
-                    "name": server_cfg["name"],
+                    "name": name,
                     "esxi_host": server_cfg["esxi_host"],
                     "port": server_cfg.get("port", 80),
                     "status": "esxi_unreachable",
-                    "error": "no ESXi password stored for this host",
+                    "error": "no ESXi login for this host",
                     "templates": [],
                 }
             )

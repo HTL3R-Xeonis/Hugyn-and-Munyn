@@ -9,8 +9,14 @@ User=junioradmin
 Group=junioradmin
 WorkingDirectory=/home/junioradmin/yaml-api
 
-# Don't put the password here - put it in EnvironmentFile instead
+# Don't put the password here - put it in EnvironmentFile instead. The same file (or this unit) must say where the
+# templates come from: TEMPLATE_STORE_DIR, or FILEBROWSER_URL + FILEBROWSER_USER + FILEBROWSER_PASSWORD - there are
+# no defaults any more, the collector refuses to run without them.
 EnvironmentFile=/home/junioradmin/yaml-api/.env
+
+# Required, no default (a collector never writes into a home folder it was not told about):
+Environment=TEMPLATES_OUTPUT_FILE=/home/junioradmin/yaml-api/data/templates.yml
+Environment=TEMPLATES_LOG_FILE=/home/junioradmin/yaml-api/logs/collect.log
 
 # A request file (see yaml-collector.path) is consumed before the run, so a request during a run starts another one
 ExecStartPre=-/bin/rm -f /home/junioradmin/yaml-api/trigger/refresh
