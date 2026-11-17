@@ -328,6 +328,50 @@ def test_an_operator_error_is_reported_with_its_status_and_detail_and_the_other_
     assert by_name["a"]["status"] == "esxi_unreachable"
 
 
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (
+            401,
+            (
+                "the Operator refused the service token (HTTP 401) - check OPERATOR_TOKEN "
+                "in .env on this machine and XEONIS_COLLECTOR_TOKEN on the Operator."
+            ),
+        ),
+        (
+            503,
+            (
+                "the credentials endpoint is switched off on the Operator "
+                "(XEONIS_COLLECTOR_TOKEN is not set there or is shorter than 32 characters)."
+            ),
+        ),
+        (
+            404,
+            "the Operator answered HTTP 404 for 10.1.1.1 (detail [redacted]) - add the host in the Operator.",
+        ),
+        (400, "the Operator answered HTTP 400 for 10.1.1.1 (detail [redacted])."),
+        (500, "the Operator answered HTTP 500 for 10.1.1.1 (detail [redacted])."),
+    ],
+)
+def test_operator_login_errors_give_status_specific_advice(
+    reader, monkeypatch, status, message
+):
+    token = "tok-" + "x" * 30
+    _operator(
+        reader,
+        monkeypatch,
+        {"10.1.1.1": FakeResponse(status, {"detail": f"detail {token}"})},
+    )
+
+    with pytest.raises(reader.OperatorLoginError) as exc:
+        reader.fetch_operator_login(
+            "http://operator.test:8123/", token, "a", "10.1.1.1", 1
+        )
+
+    assert str(exc.value) == f"Server a: {message}"
+    assert token not in str(exc.value)
+
+
 def test_an_unreachable_operator_is_reported_without_the_token(
     reader, monkeypatch, tmp_path, profiles
 ):

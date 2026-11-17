@@ -143,15 +143,29 @@ def fetch_operator_login(
             f"Server {name}: the Operator at {operator_url} could not be reached "
             f"({type(exc).__name__}) - no ESXi login."
         ) from exc
+    status = response.status_code
+    if status == 401:
+        raise OperatorLoginError(
+            f"Server {name}: the Operator refused the service token (HTTP 401) - "
+            "check OPERATOR_TOKEN in .env on this machine and XEONIS_COLLECTOR_TOKEN on the Operator."
+        )
+    if status == 503:
+        raise OperatorLoginError(
+            f"Server {name}: the credentials endpoint is switched off on the Operator "
+            "(XEONIS_COLLECTOR_TOKEN is not set there or is shorter than 32 characters)."
+        )
     try:
         body = response.json()
     except ValueError:
         body = {}
-    if response.status_code != 200:
+    if status != 200:
         detail = body.get("detail") if isinstance(body, dict) else None
+        detail = str(detail or response.reason or "no detail")
+        if token:
+            detail = detail.replace(token, "[redacted]")
+        advice = " - add the host in the Operator" if status == 404 else ""
         raise OperatorLoginError(
-            f"Server {name}: the Operator answered HTTP {response.status_code} for {ip} "
-            f"({detail or response.reason or 'no detail'}) - add the host in the Operator."
+            f"Server {name}: the Operator answered HTTP {status} for {ip} ({detail}){advice}."
         )
     username = body.get("username") if isinstance(body, dict) else None
     password = body.get("password") if isinstance(body, dict) else None
