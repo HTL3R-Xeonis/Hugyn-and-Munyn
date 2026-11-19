@@ -19,7 +19,7 @@ GET <OPERATOR_URL>/internal/host-credentials?ip=<esxi ip> with a bearer token. T
 a host without a login is reported and skipped, the others still run.
 
 With --profiles-dir the list of servers is not taken from the config file but from the host profiles of
-TopologyOperator/Ginnungagap (its settings_profiles folder): one server per profile with an esxi.ip, so a host is
+Igdrasyl, formerly TopologyOperator, of Ginnungagap (its settings_profiles folder): one server per profile with an esxi.ip, so a host is
 entered in one place only. The ESXi password of such a host is the one stored for it by the app
 (<profiles-dir>/.secrets/<profile>.json, key esxi_password), otherwise the Operator is asked. The config file is still
 read for output_file, log_file and request_timeout.

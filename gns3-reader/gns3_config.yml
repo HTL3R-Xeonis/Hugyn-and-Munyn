@@ -19,7 +19,7 @@
 # these are optional and only needed if "Enable HTTP authentication" is
 # enabled on the GNS3 server ITSELF (not ESXi) - otherwise just omit them.
 
-# Instead of listing the hosts here, the collector can take them from the host profiles of TopologyOperator/Ginnungagap:
+# Instead of listing the hosts here, the collector can take them from the host profiles of Igdrasyl (formerly TopologyOperator, part of Ginnungagap):
 #   read_gns3_templates.py --config gns3_config.yml --profiles-dir <its settings_profiles folder>
 # (or set HOST_PROFILES_DIR). Then 'servers' below is not used; each profile with an esxi.ip becomes a server named after
 # the profile, with the ESXi password the app stored for that host (else the Operator is asked). output_file, log_file and

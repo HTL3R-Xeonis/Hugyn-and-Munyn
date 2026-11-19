@@ -1,4 +1,4 @@
-# Security policy
+# Security policy - Hugyn and Munyn (formerly Docker-Server-Files)
 
 ## Reporting a vulnerability
 
