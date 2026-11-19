@@ -4,3 +4,10 @@
 
 !.gitignore
 !.env.example
+!.github/
+
+# Local secrets and generated state - never committed
+*.local.yml
+logs/
+*.log
+yaml-api/data/templates.yml

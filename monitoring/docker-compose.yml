@@ -34,7 +34,7 @@ services:
       - "9272:9272"
 
     volumes:
-      - ./vmware_exporter_config.yml:/vmware_exporter_config.yml:ro
+      - ./vmware_exporter_config.local.yml:/vmware_exporter_config.yml:ro
 
     command:
       - "-c"

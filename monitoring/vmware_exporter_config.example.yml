@@ -1,7 +1,9 @@
+# Template: copy to vmware_exporter_config.local.yml (git-ignored, mode 600) and fill in a read-only monitoring account.
+# docker-compose.yml mounts the .local.yml file. Never put real logins in this tracked file.
 default:
-  vsphere_host: "10.20.20.211"
-  vsphere_user: "monitoring@vsphere.local"
-  vsphere_password: "REMOVED"
+  vsphere_host: "vcenter.example"
+  vsphere_user: "CHANGE_ME"
+  vsphere_password: "CHANGE_ME"
   ignore_ssl: true
   specs_size: 5000
 
@@ -17,9 +19,9 @@ default:
     snapshots: true
 
 esxi8:
-  vsphere_host: "10.20.20.83"
-  vsphere_user: "monitoring"
-  vsphere_password: "REMOVED"
+  vsphere_host: "esxi.example"
+  vsphere_user: "CHANGE_ME"
+  vsphere_password: "CHANGE_ME"
   ignore_ssl: true
   specs_size: 5000
 
