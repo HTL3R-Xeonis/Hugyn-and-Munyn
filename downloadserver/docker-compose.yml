@@ -6,5 +6,6 @@ services:
     ports:
       - "4000:80"
     volumes:
-      - /mnt/nfsshare:/srv
+      # :rslave - a share that is mounted AFTER the container started (the mount can fail at boot and be retried) shows up inside
+      - /mnt/nfsshare:/srv:rslave
       - ./filebrowser.db:/database.db

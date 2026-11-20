@@ -317,6 +317,16 @@ def write_output(templates: list[dict]) -> None:
     tmp_path.replace(OUTPUT_FILE)  # atomic swap, no half-written file on a crash
 
 
+def _current_template_count() -> int:
+    """How many templates the file that is published now holds (0 when there is none or it cannot be read)."""
+    try:
+        with open(OUTPUT_FILE, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return len(data.get("templates") or [])
+    except (OSError, yaml.YAMLError, AttributeError, TypeError):
+        return 0
+
+
 NO_SOURCE_PROBLEM = (
     "Neither TEMPLATE_STORE_DIR nor FILEBROWSER_URL + FILEBROWSER_PASSWORD is set - the template list cannot be read. "
     "Set TEMPLATE_STORE_DIR (preferred) or the Filebrowser variables."
@@ -364,6 +374,17 @@ def main() -> int:
     log.info("Searching for .yml/.yaml files on the share...")
     yml_files = source.find_yml_files()
     log.info("%d YAML file(s) found.", len(yml_files))
+
+    kept = _current_template_count()
+    if not yml_files and kept and os.environ.get("TEMPLATES_ALLOW_EMPTY") != "1":
+        # an empty share is far more likely a share that is not mounted (after a reboot, a stale mount) than a store that
+        # was emptied on purpose: keep the list that is published now instead of publishing none
+        log.error(
+            "No YAML file found, but the published list has %d template(s) - the share is probably not mounted. "
+            "Keeping the current list (TEMPLATES_ALLOW_EMPTY=1 publishes an empty list on purpose).",
+            kept,
+        )
+        return 1
 
     templates, stats = collect_templates(source, yml_files)
 

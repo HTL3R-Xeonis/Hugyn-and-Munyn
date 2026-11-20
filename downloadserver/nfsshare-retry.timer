@@ -1,0 +1,9 @@
+[Unit]
+Description=Check once a minute that the template share is mounted
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Mount the template share again when the boot-time mount failed
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# /etc/fstab names the mount; this only repeats it while the share is missing (the storage host can come up later than this host)
+ExecStart=/bin/sh -c 'mountpoint -q /mnt/nfsshare || mount /mnt/nfsshare'

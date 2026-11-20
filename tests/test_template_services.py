@@ -487,3 +487,58 @@ def test_the_template_api_refresh_request_drops_the_trigger_file(monkeypatch, tm
         .status_code
         == 501
     )
+
+
+def _collector_for(monkeypatch, store, tmp_path, **extra):
+    out = tmp_path / "out" / "templates.yml"
+    collector = _collector(
+        monkeypatch,
+        TEMPLATE_STORE_DIR=str(store),
+        TEMPLATES_OUTPUT_FILE=str(out),
+        TEMPLATES_LOG_FILE=str(tmp_path / "logs" / "collect.log"),
+        **extra,
+    )
+    return collector, out
+
+
+def test_an_empty_share_does_not_wipe_the_published_list(monkeypatch, store, tmp_path):
+    """After a reboot the share can be missing: the collector then sees no file and must keep the current list."""
+    collector, out = _collector_for(monkeypatch, store, tmp_path)
+    assert collector.main() == 0
+    published = out.read_text()
+    assert "deb12" in published
+
+    for entry in list(store.iterdir()):  # the mount is gone: an empty folder is left
+        if entry.is_dir():
+            import shutil
+
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+    collector, out = _collector_for(monkeypatch, store, tmp_path)
+    assert collector.main() == 1
+    assert out.read_text() == published
+
+
+def test_an_empty_share_is_published_when_asked_for_and_on_a_first_run(
+    monkeypatch, tmp_path
+):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    collector, out = _collector_for(monkeypatch, empty, tmp_path)
+    assert (
+        collector.main() == 0
+    )  # nothing published yet: an empty list is the honest answer
+    assert "templates: []" in out.read_text()
+
+    _write_yaml(empty / "one.yml", _template("one"))
+    assert collector.main() == 0
+    (empty / "one.yml").unlink()
+    assert collector.main() == 1  # kept
+
+    collector, out = _collector_for(
+        monkeypatch, empty, tmp_path, TEMPLATES_ALLOW_EMPTY="1"
+    )
+    assert collector.main() == 0
+    assert "templates: []" in out.read_text()
