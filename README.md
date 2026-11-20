@@ -2,7 +2,7 @@
 
 **Hugyn and Munyn are the template services of [Ginnungagap](https://github.com/HTL3R-Xeonis/Ginnungagap-Appliance):** the small helper
 services that run next to the web app ([Igdrasyl, formerly TopologyOperator](https://github.com/HTL3R-Xeonis/Igdrasyl)) and tell it, and
-[Mjonyr (formerly TopologyBuilder)](https://github.com/HTL3R-Xeonis/Mjonyr), which device images exist. "Ginnungagap" is the name of the
+[Mjonyr (formerly TopologyBuilder)](https://github.com/HTL3R-Xeonis/TopologyBuilder), which device images exist. "Ginnungagap" is the name of the
 whole product; Hugyn and Munyn are code names of components and are always written together as "Hugyn and Munyn". The repository used to be
 called Docker-Server-Files. The folder names, the unit names (`yaml-collector`, `gns3-collector`), the ports and the
 `template-esxi` / `template-gns3` service names of the appliance keep their names on purpose.
